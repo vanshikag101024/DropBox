@@ -8,13 +8,13 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(--dirname, '.'),
+        '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
-      hmr: process.env.DISABLE-HMR !== 'true',
+      hmr: process.env.DISABLE_HMR !== 'true',
 
-      watch: process.env.DISABLE-HMR === 'true' / null : {},
+      watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
   };
 });
