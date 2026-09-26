@@ -184,80 +184,157 @@ export async function recordRatingInFirestore(ratingValue: number): Promise<Glob
   }
 }
 
+const CHUNK_SIZE = 600000;
+
 export async function saveDropToFirestore(drop: DropPayload): Promise<void> {
-  const docRef = doc(db, DROPS_COLLECTION, drop.id);
-  await setDoc(docRef, {
-    ...drop,
-    savedAt: Date.now(),
-  });
+  try {
+    const content = drop.content || '';
+    const docRef = doc(db, DROPS_COLLECTION, drop.id);
+
+    if (content.length > CHUNK_SIZE) {
+      const chunksCount = Math.ceil(content.length / CHUNK_SIZE);
+      const metaPayload = {
+        ...drop,
+        content: '',
+        isChunked: true,
+        chunksCount,
+        savedAt: Date.now(),
+      };
+      await setDoc(docRef, metaPayload);
+
+      for (let i = 0; i < chunksCount; i++) {
+        const chunkStr = content.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const chunkRef = doc(db, `${DROPS_COLLECTION}_chunks`, `${drop.id}_chunk_${i}`);
+        await setDoc(chunkRef, {
+          dropId: drop.id,
+          index: i,
+          data: chunkStr,
+        });
+      }
+    } else {
+      await setDoc(docRef, {
+        ...drop,
+        isChunked: false,
+        savedAt: Date.now(),
+      });
+    }
+  } catch (err) {
+    console.warn('saveDropToFirestore warning:', err);
+  }
 }
 
 export async function getDropFromFirestore(id: string): Promise<DropPayload | null> {
-  const docRef = doc(db, DROPS_COLLECTION, id);
-  const snap = await getDoc(docRef);
+  try {
+    const docRef = doc(db, DROPS_COLLECTION, id);
+    const snap = await getDoc(docRef);
 
-  if (!snap.exists()) {
+    if (!snap.exists()) {
+      return null;
+    }
+
+    const data = snap.data() as any;
+    const now = Date.now();
+
+    if (data.expiresAt && data.expiresAt > 0 && data.expiresAt <= now) {
+      await deleteDropFromFirestore(id).catch(() => {});
+      return null;
+    }
+
+    if (data.expirationPolicy === 'never' && data.transfersConsumed >= data.transfersMax) {
+      await deleteDropFromFirestore(id).catch(() => {});
+      return null;
+    }
+
+    if (data.isChunked && data.chunksCount > 0) {
+      const chunkPromises = [];
+      for (let i = 0; i < data.chunksCount; i++) {
+        const chunkRef = doc(db, `${DROPS_COLLECTION}_chunks`, `${id}_chunk_${i}`);
+        chunkPromises.push(getDoc(chunkRef));
+      }
+      const chunkSnaps = await Promise.all(chunkPromises);
+      let fullContent = '';
+      for (const chunkSnap of chunkSnaps) {
+        if (chunkSnap.exists()) {
+          fullContent += chunkSnap.data().data || '';
+        }
+      }
+      return {
+        ...data,
+        content: fullContent,
+      } as DropPayload;
+    }
+
+    return data as DropPayload;
+  } catch (err) {
+    console.warn('getDropFromFirestore error:', err);
     return null;
   }
-
-  const data = snap.data() as DropPayload;
-  const now = Date.now();
-
-  if (data.expiresAt && data.expiresAt <= now) {
-    await deleteDoc(docRef).catch(() => {});
-    return null;
-  }
-
-  if (data.expirationPolicy === 'never' && data.transfersConsumed >= data.transfersMax) {
-    await deleteDoc(docRef).catch(() => {});
-    return null;
-  }
-
-  return data;
 }
 
 export async function deleteDropFromFirestore(id: string): Promise<void> {
-  const docRef = doc(db, DROPS_COLLECTION, id);
-  await deleteDoc(docRef);
+  try {
+    const docRef = doc(db, DROPS_COLLECTION, id);
+    const snap = await getDoc(docRef).catch(() => null);
+    if (snap && snap.exists()) {
+      const data = snap.data();
+      if (data.isChunked && data.chunksCount) {
+        for (let i = 0; i < data.chunksCount; i++) {
+          deleteDoc(doc(db, `${DROPS_COLLECTION}_chunks`, `${id}_chunk_${i}`)).catch(() => {});
+        }
+      }
+    }
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn('deleteDropFromFirestore warning:', err);
+  }
 }
 
 export async function consumeDropInFirestore(id: string): Promise<void> {
-  const docRef = doc(db, DROPS_COLLECTION, id);
-  const snap = await getDoc(docRef);
-  if (!snap.exists()) return;
+  try {
+    const docRef = doc(db, DROPS_COLLECTION, id);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return;
 
-  const data = snap.data() as DropPayload;
-  const newCount = (data.transfersConsumed || 0) + 1;
+    const data = snap.data() as DropPayload;
+    const newCount = (data.transfersConsumed || 0) + 1;
 
-  if (data.expirationPolicy === 'never' && newCount >= (data.transfersMax || 1)) {
-    await deleteDoc(docRef);
-  } else {
-    await updateDoc(docRef, {
-      transfersConsumed: increment(1),
-    });
+    if (data.expirationPolicy === 'never' && newCount >= (data.transfersMax || 1)) {
+      await deleteDropFromFirestore(id);
+    } else {
+      await updateDoc(docRef, {
+        transfersConsumed: increment(1),
+      });
+    }
+  } catch (err) {
+    console.warn('consumeDropInFirestore warning:', err);
   }
 }
 
 export async function listActiveDropsFromFirestore(): Promise<DropPayload[]> {
-  const colRef = collection(db, DROPS_COLLECTION);
-  const snap = await getDocs(colRef);
-  const now = Date.now();
-  const activeDrops: DropPayload[] = [];
+  try {
+    const colRef = collection(db, DROPS_COLLECTION);
+    const snap = await getDocs(colRef);
+    const now = Date.now();
+    const activeDrops: DropPayload[] = [];
 
-  for (const document of snap.docs) {
-    const item = document.data() as DropPayload;
-    if (item.expiresAt && item.expiresAt <= now) {
-      deleteDoc(doc(db, DROPS_COLLECTION, item.id)).catch(() => {});
-      continue;
+    for (const document of snap.docs) {
+      const item = document.data() as DropPayload;
+      if (item.expiresAt && item.expiresAt > 0 && item.expiresAt <= now) {
+        deleteDropFromFirestore(item.id).catch(() => {});
+        continue;
+      }
+      if (item.expirationPolicy === 'never' && item.transfersConsumed >= item.transfersMax) {
+        deleteDropFromFirestore(item.id).catch(() => {});
+        continue;
+      }
+      activeDrops.push(item);
     }
-    if (item.expirationPolicy === 'never' && item.transfersConsumed >= item.transfersMax) {
-      deleteDoc(doc(db, DROPS_COLLECTION, item.id)).catch(() => {});
-      continue;
-    }
-    activeDrops.push(item);
+
+    return activeDrops;
+  } catch (err) {
+    console.warn('listActiveDropsFromFirestore warning:', err);
+    return [];
   }
-
-  return activeDrops;
 }
 
 export async function purgeExpiredDropsFromFirestore(): Promise<number> {
@@ -268,12 +345,113 @@ export async function purgeExpiredDropsFromFirestore(): Promise<number> {
     const snap = await getDocs(q);
     let purged = 0;
     for (const d of snap.docs) {
-      await deleteDoc(d.ref);
-      purged++;
+      if (d.data().expiresAt > 0) {
+        await deleteDropFromFirestore(d.id);
+        purged++;
+      }
     }
     return purged;
   } catch (err) {
     console.warn('Firestore purge warning:', err);
     return 0;
+  }
+}
+
+export const NEARBY_COLLECTION = 'ephemeral-vault-nearby';
+export const OFFERS_COLLECTION = 'ephemeral-vault-offers';
+
+export async function announcePresenceInCloud(device: any, isReceiving: boolean = false): Promise<any[]> {
+  try {
+    const docRef = doc(db, NEARBY_COLLECTION, device.id);
+    await setDoc(
+      docRef,
+      {
+        ...device,
+        isReceiving: Boolean(isReceiving),
+        lastSeen: Date.now(),
+      },
+      { merge: true }
+    );
+
+    const colRef = collection(db, NEARBY_COLLECTION);
+    const snap = await getDocs(colRef);
+    const now = Date.now();
+    const active: any[] = [];
+    for (const d of snap.docs) {
+      const devData = d.data();
+      if (now - devData.lastSeen <= 45000) {
+        if (devData.id !== device.id) {
+          active.push(devData);
+        }
+      } else {
+        deleteDoc(d.ref).catch(() => {});
+      }
+    }
+    return active;
+  } catch (err) {
+    console.warn('Cloud presence notice:', err);
+    return [];
+  }
+}
+
+export function subscribeToCloudPresence(
+  localDeviceId: string,
+  onUpdate: (devices: any[]) => void
+): () => void {
+  const colRef = collection(db, NEARBY_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const now = Date.now();
+      const active: any[] = [];
+      for (const d of snap.docs) {
+        const devData = d.data();
+        if (devData.id !== localDeviceId && now - devData.lastSeen <= 45000) {
+          active.push(devData);
+        }
+      }
+      onUpdate(active);
+    },
+    (err) => {
+      console.warn('Cloud presence subscription warning:', err);
+    }
+  );
+}
+
+export function subscribeToCloudOffers(
+  localDeviceId: string,
+  onOffer: (offer: any) => void
+): () => void {
+  const colRef = collection(db, OFFERS_COLLECTION);
+  const q = query(colRef, where('toDeviceId', '==', localDeviceId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      for (const change of snap.docChanges()) {
+        if (change.type === 'added') {
+          const offer = change.doc.data();
+          onOffer(offer);
+          deleteDoc(change.doc.ref).catch(() => {});
+        }
+      }
+    },
+    (err) => {
+      console.warn('Cloud offers subscription warning:', err);
+    }
+  );
+}
+
+export async function sendCloudTransferOffer(offerPayload: any): Promise<boolean> {
+  try {
+    const offerId = offerPayload.transferId || `tx-${Date.now()}`;
+    const docRef = doc(db, OFFERS_COLLECTION, offerId);
+    await setDoc(docRef, {
+      ...offerPayload,
+      timestamp: Date.now(),
+    });
+    return true;
+  } catch (err) {
+    console.warn('Send cloud transfer offer error:', err);
+    return false;
   }
 }

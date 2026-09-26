@@ -1,4 +1,5 @@
 import { NearbyDevice, NearbyTransferOffer } from '../types';
+import { announcePresenceInCloud, sendCloudTransferOffer } from '../services/firebase';
 
 const COLORS = [
   '#f97316',
@@ -104,6 +105,7 @@ isReceiving: boolean = false
     localMeshChannel?.postMessage({ type: 'presence-ping', device: payload });
   } catch {}
 
+  let serverDevices: NearbyDevice[] = [];
   try {
     const res = await fetch('/api/nearby/announce', {
       method: 'POST',
@@ -112,7 +114,7 @@ isReceiving: boolean = false
     });
     if (res.ok) {
       const data = await res.json();
-      return (data.devices || []).map((d: NearbyDevice) => ({
+      serverDevices = (data.devices || []).map((d: NearbyDevice) => ({
         ...d,
         isCurrentDevice: d.id === device.id,
       }));
@@ -120,7 +122,19 @@ isReceiving: boolean = false
   } catch (err) {
     console.debug('Nearby announce ping failed:', err);
   }
-  return [];
+
+  let cloudDevices: NearbyDevice[] = [];
+  try {
+    cloudDevices = await announcePresenceInCloud(payload, isReceiving);
+  } catch {}
+
+  const merged = new Map<string, NearbyDevice>();
+  for (const d of [...serverDevices, ...cloudDevices]) {
+    if (d.id !== device.id) {
+      merged.set(d.id, d);
+    }
+  }
+  return Array.from(merged.values());
 }
 
 export function broadcastLocalReceivingState(deviceId: string, isReceiving: boolean): void {
@@ -232,27 +246,34 @@ export async function sendNearbyTransferOffer(
   message?: string
 ): Promise<{ success: boolean; transferId: string; error?: string }> {
   const transferId = `nb-tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  const offerPayload = {
+    transferId,
+    fromDevice,
+    toDeviceId,
+    file,
+    message,
+    timestamp: Date.now(),
+  };
+
   try {
     const res = await fetch('/api/nearby/transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        transferId,
-        fromDevice,
-        toDeviceId,
-        file,
-        message,
-      }),
+      body: JSON.stringify(offerPayload),
     });
-    if (!res.ok) {
-      const err = await res.json();
-      return { success: false, transferId, error: err.error || 'Failed to send transfer offer' };
+    if (res.ok) {
+      return { success: true, transferId };
     }
-    return { success: true, transferId };
-  } catch (e: any) {
-    console.error('Failed to send transfer offer:', e);
-    return { success: false, transferId, error: e.message || 'Network error' };
-  }
+  } catch (e: any) {}
+
+  try {
+    const cloudOk = await sendCloudTransferOffer(offerPayload);
+    if (cloudOk) {
+      return { success: true, transferId };
+    }
+  } catch (err: any) {}
+
+  return { success: false, transferId, error: 'Could not send transfer offer to device' };
 }
 
 export async function pollIncomingNearbyOffers(

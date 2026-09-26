@@ -26,6 +26,7 @@ import {
   respondToNearbyTransfer,
 } from './utils/nearbyService';
 import { dropApi } from './services/dropApi';
+import { subscribeToCloudPresence, subscribeToCloudOffers } from './services/firebase';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 function AppContent() {
@@ -82,17 +83,28 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-
     announcePresence(localDevice, isReceivingActiveRef.current).then((devs) => {
       if (devs) {
-        setnearbyDevices(devs.filter((d) => d.id !== localDevice.id));
+        setnearbyDevices((prev) => {
+          const map = new Map<string, NearbyDevice>();
+          for (const d of [...prev, ...devs]) {
+            if (d.id !== localDevice.id) map.set(d.id, d);
+          }
+          return Array.from(map.values());
+        });
       }
     });
 
     const interval = setInterval(() => {
       announcePresence(localDevice, isReceivingActiveRef.current).then((devs) => {
         if (devs) {
-          setnearbyDevices(devs.filter((d) => d.id !== localDevice.id));
+          setnearbyDevices((prev) => {
+            const map = new Map<string, NearbyDevice>();
+            for (const d of [...prev, ...devs]) {
+              if (d.id !== localDevice.id) map.set(d.id, d);
+            }
+            return Array.from(map.values());
+          });
         }
       });
     }, 3000);
@@ -115,12 +127,29 @@ function AppContent() {
       () => ({ device: localDevice, isReceiving: isReceivingActiveRef.current })
     );
 
+    const unsubCloudPresence = subscribeToCloudPresence(localDevice.id, (cloudDevs) => {
+      setnearbyDevices((prev) => {
+        const map = new Map<string, NearbyDevice>();
+        for (const d of [...prev, ...cloudDevs]) {
+          if (d.id !== localDevice.id) map.set(d.id, d);
+        }
+        return Array.from(map.values());
+      });
+    });
+
+    const unsubCloudOffers = subscribeToCloudOffers(localDevice.id, (offer) => {
+      setIncomingOffer(offer);
+      showToast(`Incoming file from ${offer.fromDevice.name}!`);
+    });
+
     return () => {
       clearInterval(interval);
       unsubMesh();
+      unsubCloudPresence();
+      unsubCloudOffers();
       leavePresence(localDevice.id);
     };
-  }, [localDevice]);
+  }, [localDevice, showToast]);
 
   useEffect(() => {
     const fetchDrops = async () => {
