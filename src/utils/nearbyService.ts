@@ -46,6 +46,9 @@ export function setCustomDeviceName(name: string): void {
 let meshChannel: ReturnType<typeof supabase.channel> | null = null;
 let activeDevices = new Map<string, NearbyDevice>();
 
+let offerListeners: ((offer: NearbyTransferOffer) => void)[] = [];
+let responseListeners: ((transferId: string, status: 'accepted'|'declined', toDeviceId: string) => void)[] = [];
+
 export function subscribeToLocalMesh(
   onDeviceDiscovered: (device: NearbyDevice) => void,
   onDeviceLeft: (deviceId: string) => void,
@@ -93,6 +96,15 @@ export function subscribeToLocalMesh(
         }
       }
     })
+    .on('broadcast', { event: `offer-${getCurrentState().device.id}` }, (payload) => {
+      offerListeners.forEach(l => l(payload.payload as NearbyTransferOffer));
+    })
+    .on('broadcast', { event: `response-${getCurrentState().device.id}` }, (payload) => {
+      const data = payload.payload;
+      if (data.transferId && data.status && data.toDeviceId) {
+        responseListeners.forEach(l => l(data.transferId, data.status, data.toDeviceId));
+      }
+    })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         const state = getCurrentState();
@@ -106,6 +118,8 @@ export function subscribeToLocalMesh(
     meshChannel?.unsubscribe();
     meshChannel = null;
     activeDevices.clear();
+    offerListeners = [];
+    responseListeners = [];
   };
 }
 
@@ -159,16 +173,10 @@ export function subscribeToIncomingOffers(
   localDeviceId: string,
   onOffer: (offer: NearbyTransferOffer) => void
 ): () => void {
-  if (!meshChannel) {
-    meshChannel = supabase.channel('nearby-mesh');
-    meshChannel.subscribe();
-  }
-
-  const handler = meshChannel.on('broadcast', { event: `offer-${localDeviceId}` }, (payload) => {
-    onOffer(payload.payload as NearbyTransferOffer);
-  });
-
-  return () => {}; // Channel is managed globally
+  offerListeners.push(onOffer);
+  return () => {
+    offerListeners = offerListeners.filter(l => l !== onOffer);
+  };
 }
 
 export async function respondToNearbyTransfer(
@@ -190,19 +198,10 @@ export function subscribeToTransferResponses(
   localDeviceId: string,
   onResponse: (transferId: string, status: 'accepted'|'declined', toDeviceId: string) => void
 ): () => void {
-  if (!meshChannel) {
-    meshChannel = supabase.channel('nearby-mesh');
-    meshChannel.subscribe();
-  }
-
-  meshChannel.on('broadcast', { event: `response-${localDeviceId}` }, (payload) => {
-    const data = payload.payload;
-    if (data.transferId && data.status && data.toDeviceId) {
-      onResponse(data.transferId, data.status, data.toDeviceId);
-    }
-  });
-
-  return () => {};
+  responseListeners.push(onResponse);
+  return () => {
+    responseListeners = responseListeners.filter(l => l !== onResponse);
+  };
 }
 
 export function triggerDirectDownload(file: { name: string; content: string; mimeType?: string }): void {
