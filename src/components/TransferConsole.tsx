@@ -1210,7 +1210,7 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
                         <div className="flex flex-col items-center w-full">
                           <NearbyRadarView
                             localDevice={localDevice}
-                            nearbyDevices={nearbyDevices}
+                            nearbyDevices={nearbyDevices.filter(d => d.isReceiving)}
                             onSelectDevice={handleSendToNearbyDevice}
                             sendingToDeviceId={sendingToDeviceId}
                             transferSuccessDeviceId={transferSuccessDeviceId}
