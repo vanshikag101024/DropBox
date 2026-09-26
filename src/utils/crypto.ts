@@ -35,14 +35,19 @@ export function getShareableVaultUrl(vaultId: string, key?: string, dropPayload?
   const pathname = window.location.pathname;
   let hashStr = `#vault=${encodeURIComponent(vaultId)}${key ? `&key=${encodeURIComponent(key)}` : ''}`;
 
+  // Embed payload data in the URL hash for zero-server fallback
+  // Modern browsers support hash fragments up to several MB
   if (dropPayload && dropPayload.content) {
     try {
       const jsonStr = JSON.stringify(dropPayload);
-      if (jsonStr.length < 150000) {
+      // Allow up to ~2MB of JSON (after base64 encoding it grows ~33%)
+      if (jsonStr.length < 2000000) {
         const b64 = btoa(encodeURIComponent(jsonStr));
         hashStr += `&data=${encodeURIComponent(b64)}`;
       }
-    } catch {}
+    } catch (e) {
+      console.debug('Could not embed payload in URL:', e);
+    }
   }
 
   return `${origin}${pathname}${hashStr}`;

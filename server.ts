@@ -26,7 +26,7 @@ const isIdleStreamMsg = (msg: string) =>
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
 process.stderr.write = (chunk: any, encoding?: any, callback?: any) => {
-  const str = typeof chunk === 'string' ? chunk : chunk.toString().dotAll() || '';
+  const str = typeof chunk === 'string' ? chunk : chunk.toString();
   if (isIdleStreamMsg(str)) {
     if (typeof encoding === 'function') encoding();
     if (typeof callback === 'function') callback();

@@ -5,28 +5,44 @@ import {
   recordSentTransferInFirestore,
   recordRatingInFirestore,
   subscribeToTelemetryStats,
-  listActiveDropsFromFirestore,
   saveDropToFirestore,
-  getDropFromFirestore,
   consumeDropInFirestore,
   deleteDropFromFirestore,
 } from './firebase';
 
+
+function extractDropFromHash(id: string): DropPayload | null {
+  try {
+    const hash = window.location.hash;
+    if (!hash.includes('data=')) return null;
+    const params = new URLSearchParams(hash.replace(/^#/, ''));
+    const encodedData = params.get('data');
+    if (!encodedData) return null;
+    const jsonStr = decodeURIComponent(atob(decodeURIComponent(encodedData)));
+    const drop = JSON.parse(jsonStr) as DropPayload;
+    if (drop && drop.id) {
+      return drop;
+    }
+  } catch { }
+  return null;
+}
+
 export const dropApi = {
   async getStats(): Promise<GlobalTelemetryStats> {
+    try {
+      const res = await fetch('/api/stats');
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch { }
+
     try {
       const firestoreStats = await getTelemetryStatsFromFirestore();
       if (firestoreStats) {
         return firestoreStats;
       }
-    } catch {
-      try {
-        const res = await fetch('/api/stats');
-        if (res.ok) {
-          return await res.json();
-        }
-      } catch {}
-    }
+    } catch { }
+
     return {
       downloadedFiles: 0,
       sentTransfers: 0,
@@ -43,19 +59,22 @@ export const dropApi = {
 
   async submitRating(rating: number): Promise<GlobalTelemetryStats | null> {
     try {
-      const updated = await recordRatingInFirestore(rating);
-      fetch('/api/ratings', {
+      const res = await fetch('/api/ratings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating }),
-      }).catch(() => {});
-
-      if (updated) {
-        return updated;
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats) return data.stats;
       }
-    } catch (err) {
-      console.warn('Error submitting rating to Firestore:', err);
-    }
+    } catch { }
+
+    try {
+      const updated = await recordRatingInFirestore(rating);
+      if (updated) return updated;
+    } catch { }
+
     return null;
   },
 
@@ -65,14 +84,7 @@ export const dropApi = {
       if (res.ok) {
         return await res.json();
       }
-    } catch {
-      try {
-        return await listActiveDropsFromFirestore();
-      } catch (err) {
-        console.warn('Firestore fallback list error:', err);
-        return [];
-      }
-    }
+    } catch { }
     return [];
   },
 
@@ -80,26 +92,37 @@ export const dropApi = {
     try {
       const res = await fetch(`/api/drops/${encodeURIComponent(id)}`);
       if (res.ok) {
-        return await res.json();
+        const drop = await res.json();
+        try {
+          localStorage.setItem(`ephem-drop-${id}`, JSON.stringify(drop));
+        } catch { }
+        return drop;
       }
-    } catch (err: any) {}
-
-    try {
-      const firestoreDrop = await getDropFromFirestore(id);
-      if (firestoreDrop) {
-        return firestoreDrop;
+      if (res.status === 410) {
+        throw new Error('Drop has expired.');
       }
-    } catch {}
+    } catch (err: any) {
+      if (err?.message?.includes('expired')) throw err;
+    }
 
     try {
       const cached = localStorage.getItem(`ephem-drop-${id}`);
       if (cached) {
         const parsed = JSON.parse(cached) as DropPayload;
-        if (!parsed.expiresAt || parsed.expiresAt > Date.now()) {
+        const now = Date.now();
+        if (!parsed.expiresAt || parsed.expiresAt === 0 || parsed.expiresAt > now) {
           return parsed;
         }
       }
-    } catch {}
+    } catch { }
+
+    const hashDrop = extractDropFromHash(id);
+    if (hashDrop) {
+      try {
+        localStorage.setItem(`ephem-drop-${id}`, JSON.stringify(hashDrop));
+      } catch { }
+      return hashDrop;
+    }
 
     throw new Error('Drop expired or not found');
   },
@@ -117,29 +140,20 @@ export const dropApi = {
         createdDrop = await res.json();
       }
     } catch (err) {
-      console.warn('Server drop creation warning:', err);
+      console.debug('Server drop creation notice:', err);
     }
 
     const payload = (createdDrop || drop) as DropPayload;
 
     try {
-      await saveDropToFirestore(payload);
-    } catch (err) {
-      console.warn('Failed to save drop to Firestore:', err);
-    }
-
-    try {
       const jsonStr = JSON.stringify(payload);
-      if (jsonStr.length < 2000000) {
+      if (jsonStr.length < 5000000) {
         localStorage.setItem(`ephem-drop-${payload.id}`, jsonStr);
       }
-    } catch {}
+    } catch { }
 
-    try {
-      await recordSentTransferInFirestore(payload.sizeBytes || 0);
-    } catch (err) {
-      console.warn('Failed to record sent transfer in Firestore:', err);
-    }
+    saveDropToFirestore(payload).catch(() => { });
+    recordSentTransferInFirestore(payload.sizeBytes || 0).catch(() => { });
 
     return payload;
   },
@@ -151,15 +165,15 @@ export const dropApi = {
       if (res.ok) {
         result = await res.json();
       }
-    } catch {}
-    await recordDownloadedFileInFirestore().catch(() => {});
-    await consumeDropInFirestore(id).catch(() => {});
+    } catch { }
+    recordDownloadedFileInFirestore().catch(() => { });
+    consumeDropInFirestore(id).catch(() => { });
     return result;
   },
 
   async deleteDrop(id: string): Promise<void> {
-    fetch(`/api/drops/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
-    await deleteDropFromFirestore(id).catch(() => {});
+    fetch(`/api/drops/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => { });
+    deleteDropFromFirestore(id).catch(() => { });
   },
 
   getDownloadUrl(id: string): string {

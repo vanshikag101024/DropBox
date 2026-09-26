@@ -35,7 +35,7 @@ try {
 var isIdleStreamMsg = (msg) => msg.includes("Disconnecting idle stream") || msg.includes("Timed out waiting for new targets") || msg.includes("GrpcConnection RPC");
 var originalStderrWrite = process.stderr.write.bind(process.stderr);
 process.stderr.write = (chunk, encoding, callback) => {
-  const str = typeof chunk === "string" ? chunk : chunk.toString().dotAll() || "";
+  const str = typeof chunk === "string" ? chunk : chunk.toString();
   if (isIdleStreamMsg(str)) {
     if (typeof encoding === "function") encoding();
     if (typeof callback === "function") callback();

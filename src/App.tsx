@@ -210,13 +210,13 @@ function AppContent() {
           } else if (data.type === 'drop_deleted') {
             setDrops((prev) => prev.filter((d) => d.id !== data.payload.id));
             setSelectedDrop((prev) => {
-            if (prev && prev.id === data.payload.id) {
+              if (prev && prev.id === data.payload.id) {
                 return null;
-            }
+              }
               return prev;
             });
             if (data.payload.reason === 'burned') {
-            showToast('Drop single-access limit reached: Shredded in real-time');
+              showToast('Drop single-access limit reached: Shredded in real-time');
             } else if (data.payload.reason === 'expired') {
               showToast('Drop timer expired: Shredded from memory');
             }
@@ -276,12 +276,15 @@ function AppContent() {
         const params = new URLSearchParams(hash.replace(/^#/, ''));
         const vaultId = params.get('vault');
         const encodedData = params.get('data');
-
         if (encodedData) {
           try {
-            const jsonStr = decodeURIComponent(atob(encodedData));
+            const decoded = decodeURIComponent(encodedData);
+            const jsonStr = decodeURIComponent(atob(decoded));
             const embeddedDrop = JSON.parse(jsonStr) as DropPayload;
             if (embeddedDrop && embeddedDrop.id) {
+              try {
+                localStorage.setItem(`ephem-drop-${embeddedDrop.id}`, JSON.stringify(embeddedDrop));
+              } catch { }
               setSelectedDrop(embeddedDrop);
               setIsLoadingRecipient(false);
               return;
@@ -342,13 +345,13 @@ function AppContent() {
         if (!existing.includes(savedDrop.id)) {
           localStorage.setItem('my-created-vault-ids', JSON.stringify([savedDrop.id, ...existing]));
         }
-      } catch {}
+      } catch { }
       setTimeout(() => {
         setShowRatingPrompt(true);
       }, 1200);
     } catch {
 
-    setDrops((prev) => [newDrop, ...prev]);
+      setDrops((prev) => [newDrop, ...prev]);
       setSelectedDrop(newDrop);
 
       setGlobalStats((prev) => {
@@ -364,9 +367,9 @@ function AppContent() {
       try {
         const existing = JSON.parse(localStorage.getItem('my-created-vault-ids') || '[]');
         if (!existing.includes(newDrop.id)) {
-        localStorage.setItem('my-created-vault-ids', JSON.stringify([newDrop.id, ...existing]));
+          localStorage.setItem('my-created-vault-ids', JSON.stringify([newDrop.id, ...existing]));
         }
-      } catch {}
+      } catch { }
       setTimeout(() => {
         setShowRatingPrompt(true);
       }, 1200);
@@ -439,7 +442,7 @@ function AppContent() {
             ratingsCount: count,
           };
         });
-}
+      }
       showToast(`Rating submitted (${rating} ★). Average updated!`);
     } catch (e) {
       console.warn('Error saving rating:', e);
@@ -450,7 +453,7 @@ function AppContent() {
     try {
       await dropApi.deleteDrop(dropId);
     } catch (e) {
-    console.warn('Backend delete fallback:', e);
+      console.warn('Backend delete fallback:', e);
     }
 
     setDrops((prev) => prev.filter((d) => d.id !== dropId));
@@ -487,16 +490,14 @@ function AppContent() {
 
         <div
           id="toast-msg"
-          className={`fixed bottom-6 right-6 z-50 bg-white/95 backdrop-blur-md text-slate-800 px-5 py-3 rounded-2xl shadow-[0-12px-36px--6px-rgba(0,0,0,0.16),0-0-0-1px-rgba(0,0,0,0.06)] flex items-center gap-3 border border-slate-200/90 transition-all duration-300 pointer-events-none max-w-[90vw] ${
-            toastMessage ? 'transl ate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
-          }`}
+          className={`fixed bottom-6 right-6 z-50 bg-white/95 backdrop-blur-md text-slate-800 px-5 py-3 rounded-2xl shadow-[0-12px-36px--6px-rgba(0,0,0,0.16),0-0-0-1px-rgba(0,0,0,0.06)] flex items-center gap-3 border border-slate-200/90 transition-all duration-300 pointer-events-none max-w-[90vw] ${toastMessage ? 'transl ate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
+            }`}
         >
           <div
-            className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border ${
-              toastMessage?.toLowerCase().includes('decline') || toastMessage?.toLowerCase().includes('error')
+            className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border ${toastMessage?.toLowerCase().includes('decline') || toastMessage?.toLowerCase().includes('error')
                 ? 'bg-rose-50 border-rose-200 text-rose-600'
                 : 'bg-emerald-50 border-emerald-200 text-emerald-600'
-            }`}
+              }`}
           >
             <span className="material-symbols-outlined text-[16px]">
               {toastMessage?.toLowerCase().includes('decline') || toastMessage?.toLowerCase().includes('error')
@@ -504,10 +505,10 @@ function AppContent() {
                 : 'check'}
             </span>  </div>  <span className="font-sans text-[13px] font-semibold text-slate-800 tracking-tight" id="toast-text">
             {toastMessage}
-          </span>        
-      </div>
+          </span>
+        </div>
 
-        <RatingPromptModal          isOpen={showRatingPrompt}
+        <RatingPromptModal isOpen={showRatingPrompt}
           onRate={handleRate}
           onClose={() => setShowRatingPrompt(false)}
         />
@@ -528,7 +529,7 @@ function AppContent() {
 
       <main className="w-full pt-2 sm:pt-4 relative z-10 flex-1 flex flex-col pb-12">
         {(activeTab === 'send' || activeTab === 'transfer') && (
-          <TransferConsole            initialMode="send"
+          <TransferConsole initialMode="send"
             onCreateDrop={handleCreateDrop}
             onViewDrop={(drop) => {
               setSelectedDrop(drop);
@@ -550,7 +551,7 @@ function AppContent() {
         )}
 
         {activeTab === 'receive' && (
-          <TransferConsole            initialMode="receive"
+          <TransferConsole initialMode="receive"
             onCreateDrop={handleCreateDrop}
             onViewDrop={(drop) => {
               setSelectedDrop(drop);
@@ -583,7 +584,7 @@ function AppContent() {
           />
         )}
       </main>
-      <IncomingNearbyTransferModal        offer={incomingOffer}
+      <IncomingNearbyTransferModal offer={incomingOffer}
         onClose={() => setIncomingOffer(null)}
         onShowToast={showToast}
         onTransferCompleted={() => {
@@ -605,22 +606,20 @@ function AppContent() {
         onClose={() => setShowRatingPrompt(false)}
       />
 
-      <div        id="toast-msg"
-        className={`fixed bottom-6 right-6 z-50 bg-white/95 backdrop-blur-md text-slate-800 px-5 py-3 rounded-2xl shadow-[0-12px-36px--6px-rgba(0,0,0,0.16),0-0-0-1px-rgba(0,0,0,0.06)] flex items-center gap-3 border border-slate-200/90 transition-all duration-300 pointer-events-none max-w-[90vw] ${
-          toastMessage ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
-        }`}
+      <div id="toast-msg"
+        className={`fixed bottom-6 right-6 z-50 bg-white/95 backdrop-blur-md text-slate-800 px-5 py-3 rounded-2xl shadow-[0-12px-36px--6px-rgba(0,0,0,0.16),0-0-0-1px-rgba(0,0,0,0.06)] flex items-center gap-3 border border-slate-200/90 transition-all duration-300 pointer-events-none max-w-[90vw] ${toastMessage ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'
+          }`}
       >
         <div
-          className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border ${
-            toastMessage?.toLowerCase().includes('decline') || toastMessage?.toLowerCase().includes('error')
+          className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border ${toastMessage?.toLowerCase().includes('decline') || toastMessage?.toLowerCase().includes('error')
               ? 'bg-rose-50 border-rose-200 text-rose-600'
               : 'bg-emerald-50 border-emerald-200 text-emerald-600'
-          }`}
+            }`}
         >
           <span className="material-symbols-outlined text-[16px]">
             {toastMessage?.toLowerCase().includes('decline') || toastMessage?.toLowerCase().includes('error')
               ? 'close'
-            : 'check'}
+              : 'check'}
           </span>
         </div>
         <span className="font-sans text-[13px] font-semibold text-slate-800 tracking-tight" id="toast-text">
