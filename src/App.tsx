@@ -66,9 +66,6 @@ function AppContent() {
       setIsReceivingActive(active);
       isReceivingActiveRef.current = active;
 
-      announcePresence(localDevice, active).then((devs) => {
-        if (devs) setnearbyDevices(devs);
-      });
       updateRemoteReceivingState(localDevice.id, active);
     },
     [localDevice]
@@ -82,31 +79,6 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    announcePresence(localDevice, isReceivingActiveRef.current).then((devs) => {
-      if (devs) {
-        setnearbyDevices((prev) => {
-          const map = new Map<string, NearbyDevice>();
-          for (const d of [...prev, ...devs]) {
-            if (d.id !== localDevice.id) map.set(d.id, d);
-          }
-          return Array.from(map.values());
-        });
-      }
-    });
-
-    const interval = setInterval(() => {
-      announcePresence(localDevice, isReceivingActiveRef.current).then((devs) => {
-        if (devs) {
-          setnearbyDevices((prev) => {
-            const map = new Map<string, NearbyDevice>();
-            for (const d of [...prev, ...devs]) {
-              if (d.id !== localDevice.id) map.set(d.id, d);
-            }
-            return Array.from(map.values());
-          });
-        }
-      });
-    }, 3000);
 
     const unsubMesh = subscribeToLocalMesh(
       (discoveredDev) => {
@@ -136,7 +108,6 @@ function AppContent() {
     });
 
     return () => {
-      clearInterval(interval);
       unsubMesh();
       unsubOffers();
       unsubResponses();
