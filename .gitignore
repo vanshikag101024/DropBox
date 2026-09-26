@@ -1,2 +1,6 @@
 node_modules
 firebase-applet-config.json
+.env
+.env.*
+dist
+dist-ssr

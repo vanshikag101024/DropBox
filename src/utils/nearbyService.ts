@@ -1,14 +1,8 @@
 import { NearbyDevice, NearbyTransferOffer } from '../types';
-import { announcePresenceInCloud, sendCloudTransferOffer, sendCloudTransferResponse } from '../services/firebase';
+import { supabase } from '../services/supabase';
 
 const COLORS = [
-  '#f97316',
-  '#3b82f6',
-  '#10b981',
-  '#8b5cf6',
-  '#ec4899',
-  '#06b6d4',
-  '#eab308',
+  '#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#eab308'
 ];
 
 export function getlocalDevice(): NearbyDevice {
@@ -21,143 +15,36 @@ export function getlocalDevice(): NearbyDevice {
   let os = 'Unknown OS';
   let defaultName = 'Computer';
 
-  if (/iPad|Tablet/i.test(ua)) {
-    type = 'tablet';
-    os = 'iPadOS';
-    defaultName = 'iPad';
-  } else if (/iPhone|iPod/i.test(ua)) {
-    type = 'mobile';
-    os = 'iOS';
-    defaultName = 'iPhone';
-  } else if (/Android/i.test(ua)) {
-    type = 'mobile';
-    os = 'Android';
-    defaultName = 'Android Phone';
-  } else if (/Macintosh|Mac OS X/i.test(ua)) {
-    type = 'laptop';
-    os = 'macOS';
-    defaultName = 'MacBook';
-  } else if (/Windows/i.test(ua)) {
-    type = 'desktop';
-    os = 'Windows';
-    defaultName = 'Windows PC';
-  } else if (/Linux/i.test(ua)) {
-    type = 'desktop';
-    os = 'Linux';
-    defaultName = 'Linux PC';
-  }
+  if (/iPad|Tablet/i.test(ua)) { type = 'tablet'; os = 'iPadOS'; defaultName = 'iPad'; }
+  else if (/iPhone|iPod/i.test(ua)) { type = 'mobile'; os = 'iOS'; defaultName = 'iPhone'; }
+  else if (/Android/i.test(ua)) { type = 'mobile'; os = 'Android'; defaultName = 'Android Phone'; }
+  else if (/Macintosh|Mac OS X/i.test(ua)) { type = 'laptop'; os = 'macOS'; defaultName = 'MacBook'; }
+  else if (/Windows/i.test(ua)) { type = 'desktop'; os = 'Windows'; defaultName = 'Windows PC'; }
+  else if (/Linux/i.test(ua)) { type = 'desktop'; os = 'Linux'; defaultName = 'Linux PC'; }
 
   let browser = 'Browser';
   if (/Chrome/i.test(ua) && !/Edg/i.test(ua)) browser = 'Chrome';
-else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
+  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browser = 'Safari';
   else if (/Firefox/i.test(ua)) browser = 'Firefox';
   else if (/Edg/i.test(ua)) browser = 'Edge';
 
-  const id =
-    storedId ||
-    `dev-${Math.random().toString(36).substring(2, 9)}-${Date.now().toString(36).slice(-4)}`;
-  if (!storedId) {
-    sessionStorage.setItem('ephem-nearby-device-id', id);
-  }
+  const id = storedId || `dev-${Math.random().toString(36).substring(2, 9)}`;
+  if (!storedId) sessionStorage.setItem('ephem-nearby-device-id', id);
 
-  const avatarColor =
-    storedColor || COLORS[Math.floor(Math.random() * COLORS.length)];
-  if (!storedColor) {
-    sessionStorage.setItem('ephem-nearby-device-color', avatarColor);
-  }
+  const avatarColor = storedColor || COLORS[Math.floor(Math.random() * COLORS.length)];
+  if (!storedColor) sessionStorage.setItem('ephem-nearby-device-color', avatarColor);
 
-  const tabSuffix = id.slice(-3).toUpperCase();
-  const name = storedName || `${defaultName} (${tabSuffix})`;
+  const name = storedName || `${defaultName} (${id.slice(-3).toUpperCase()})`;
 
-  return {
-    id,
-    name,
-    type,
-    browser,
-    os,
-    avatarColor,
-    lastSeen: Date.now(),
-    isCurrentDevice: true,
-  };
+  return { id, name, type, browser, os, avatarColor, lastSeen: Date.now(), isCurrentDevice: true };
 }
 
 export function setCustomDeviceName(name: string): void {
   localStorage.setItem('ephem-nearby-device-name', name.trim());
 }
 
-let localMeshChannel: BroadcastChannel | null = null;
-try {
-  if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-    localMeshChannel = new BroadcastChannel('ephemeravault-nearby-mesh');
-  }
-} catch {}
-
-export async function announcePresence(
-  device: NearbyDevice,
-isReceiving: boolean = false
-): Promise<NearbyDevice[]> {
-  const payload: NearbyDevice = {
-    ...device,
-    isReceiving: Boolean(isReceiving),
-  };
-
-  try {
-    localMeshChannel?.postMessage({ type: 'presence-ping', device: payload });
-  } catch {}
-
-  let serverDevices: NearbyDevice[] = [];
-  try {
-    const res = await fetch('/api/nearby/announce', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      serverDevices = (data.devices || []).map((d: NearbyDevice) => ({
-        ...d,
-        isCurrentDevice: d.id === device.id,
-      }));
-    }
-  } catch (err) {
-    console.debug('Nearby announce ping failed:', err);
-  }
-
-  let cloudDevices: NearbyDevice[] = [];
-  try {
-    cloudDevices = await announcePresenceInCloud(payload, isReceiving);
-  } catch {}
-
-  const merged = new Map<string, NearbyDevice>();
-  for (const d of [...serverDevices, ...cloudDevices]) {
-    if (d.id !== device.id) {
-      merged.set(d.id, d);
-    }
-  }
-  return Array.from(merged.values());
-}
-
-export function broadcastLocalReceivingState(deviceId: string, isReceiving: boolean): void {
-  try {
-    localMeshChannel?.postMessage({
-      type: 'presence-status',
-      deviceId,
-      isReceiving: Boolean(isReceiving),
-    });
-  } catch {}
-}
-
-export async function updateRemoteReceivingState(deviceId: string, isReceiving: boolean): Promise<void> {
-  try {
-    await fetch('/api/nearby/status', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: deviceId, isReceiving: Boolean(isReceiving) }),
-    });
-  } catch (err) {
-    console.debug('Nearby status update failed:', err);
-  }
-}
+let meshChannel: ReturnType<typeof supabase.channel> | null = null;
+let activeDevices = new Map<string, NearbyDevice>();
 
 export function subscribeToLocalMesh(
   onDeviceDiscovered: (device: NearbyDevice) => void,
@@ -165,128 +52,123 @@ export function subscribeToLocalMesh(
   onDeviceStatusChanged: (deviceId: string, isReceiving: boolean) => void,
   getCurrentState: () => { device: NearbyDevice; isReceiving: boolean }
 ): () => void {
-  if (!localMeshChannel) return () => {};
+  
+  if (!meshChannel) {
+    meshChannel = supabase.channel('nearby-mesh', {
+      config: { presence: { key: getCurrentState().device.id } }
+    });
+  }
 
-  const handleMessage = (event: MessageEvent) => {
-    try {
-      const data = event.data;
-      if (!data) return;
-      const current = getCurrentState();
+  meshChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = meshChannel!.presenceState();
+      const currentActiveIds = new Set<string>();
 
-      if (data.type === 'presence-ping' && data.device) {
-        if (data.device.id !== current.device.id) {
-          onDeviceDiscovered(data.device);
-          localMeshChannel?.postMessage({
-            type: 'presence-pong',
-            device: {
-              ...current.device,
-              isReceiving: current.isReceiving,
-            },
-          });
+      for (const key in state) {
+        if (key === getCurrentState().device.id) continue;
+        const presences = state[key] as any[];
+        if (presences && presences.length > 0) {
+          const deviceData = presences[0].device as NearbyDevice;
+          if (deviceData) {
+            currentActiveIds.add(deviceData.id);
+            const isNew = !activeDevices.has(deviceData.id);
+            const oldStatus = activeDevices.get(deviceData.id)?.isReceiving;
+            
+            activeDevices.set(deviceData.id, deviceData);
+            
+            if (isNew) {
+              onDeviceDiscovered(deviceData);
+            } else if (oldStatus !== deviceData.isReceiving) {
+              onDeviceStatusChanged(deviceData.id, Boolean(deviceData.isReceiving));
+            }
+          }
         }
-      } else if (data.type === 'presence-pong' && data.device) {
-        if (data.device.id !== current.device.id) {
-          onDeviceDiscovered(data.device);
-        }
-      } else if (data.type === 'presence-status' && data.deviceId) {
-        if (data.deviceId !== current.device.id) {
-          onDeviceStatusChanged(data.deviceId, Boolean(data.isReceiving));
-        }
-      } else if (data.type === 'presence-leave' && data.deviceId) {
-        onDeviceLeft(data.deviceId);
       }
-    } catch {}
-  };
 
-  localMeshChannel.addEventListener('message', handleMessage);
-
-  const initial = getCurrentState();
-  localMeshChannel.postMessage({
-    type: 'presence-ping',
-    device: {
-      ...initial.device,
-      isReceiving: initial.isReceiving,
-    },
-  });
+      // Check for leaves
+      for (const [id] of activeDevices) {
+        if (!currentActiveIds.has(id)) {
+          activeDevices.delete(id);
+          onDeviceLeft(id);
+        }
+      }
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        const state = getCurrentState();
+        await meshChannel!.track({
+          device: { ...state.device, isReceiving: state.isReceiving }
+        });
+      }
+    });
 
   return () => {
-    localMeshChannel?.removeEventListener('message', handleMessage);
+    meshChannel?.unsubscribe();
+    meshChannel = null;
+    activeDevices.clear();
   };
 }
 
-export async function leavePresence(deviceId: string): Promise<void> {
-  try {
-    localMeshChannel?.postMessage({ type: 'presence-leave', deviceId });
-  } catch {}
+export async function announcePresence(device: NearbyDevice, isReceiving: boolean = false): Promise<NearbyDevice[]> {
+  if (meshChannel && meshChannel.state === 'joined') {
+    await meshChannel.track({
+      device: { ...device, isReceiving }
+    });
+  }
+  return Array.from(activeDevices.values());
+}
 
-  try {
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon('/api/nearby/leave', JSON.stringify({ id: deviceId }));
-    } else {
-      await fetch('/api/nearby/leave', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: deviceId }),
-        keepalive: true,
-      });
-    }
-  } catch {}
+export async function updateRemoteReceivingState(deviceId: string, isReceiving: boolean): Promise<void> {
+  if (meshChannel && meshChannel.state === 'joined') {
+    const me = getlocalDevice();
+    await meshChannel.track({
+      device: { ...me, isReceiving }
+    });
+  }
+}
+
+export async function leavePresence(deviceId: string): Promise<void> {
+  if (meshChannel) {
+    await meshChannel.untrack();
+  }
 }
 
 export async function sendNearbyTransferOffer(
   fromDevice: NearbyDevice,
   toDeviceId: string,
-  file: {
-    name: string;
-    sizeBytes: number;
-    type: string;
-    mimeType?: string;
-    content: string;
-  },
+  file: { name: string; sizeBytes: number; type: string; mimeType?: string; content: string; },
   message?: string
 ): Promise<{ success: boolean; transferId: string; error?: string }> {
   const transferId = `nb-tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const offerPayload = {
-    transferId,
-    fromDevice,
-    toDeviceId,
-    file,
-    message,
-    timestamp: Date.now(),
+  const offer: NearbyTransferOffer = {
+    transferId, fromDevice, toDeviceId, file, message, timestamp: Date.now(),
   };
 
-  try {
-    const res = await fetch('/api/nearby/transfer', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(offerPayload),
+  if (meshChannel) {
+    const res = await meshChannel.send({
+      type: 'broadcast',
+      event: `offer-${toDeviceId}`,
+      payload: offer
     });
-    if (res.ok) {
-      return { success: true, transferId };
-    }
-  } catch (e: any) {}
-
-  try {
-    const cloudOk = await sendCloudTransferOffer(offerPayload);
-    if (cloudOk) {
-      return { success: true, transferId };
-    }
-  } catch (err: any) {}
-
-  return { success: false, transferId, error: 'Could not send transfer offer to device' };
+    if (res === 'ok') return { success: true, transferId };
+  }
+  return { success: false, transferId, error: 'Could not send offer.' };
 }
 
-export async function pollIncomingNearbyOffers(
-  deviceId: string
-): Promise<NearbyTransferOffer[]> {
-  try {
-    const res = await fetch(`/api/nearby/inbox/deviceId=${encodeURIComponent(deviceId)}`);
-    if (res.ok) {
-      const data = await res.json();
-      return data.offers || [];
-    }
-  } catch {}
-  return [];
+export function subscribeToIncomingOffers(
+  localDeviceId: string,
+  onOffer: (offer: NearbyTransferOffer) => void
+): () => void {
+  if (!meshChannel) {
+    meshChannel = supabase.channel('nearby-mesh');
+    meshChannel.subscribe();
+  }
+
+  const handler = meshChannel.on('broadcast', { event: `offer-${localDeviceId}` }, (payload) => {
+    onOffer(payload.payload as NearbyTransferOffer);
+  });
+
+  return () => {}; // Channel is managed globally
 }
 
 export async function respondToNearbyTransfer(
@@ -295,48 +177,44 @@ export async function respondToNearbyTransfer(
   toDeviceId?: string,
   fromDeviceId?: string
 ): Promise<void> {
-  try {
-    await fetch(`/api/nearby/transfer/${encodeURIComponent(transferId)}/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transferId, status, toDeviceId, fromDeviceId }),
+  if (meshChannel && fromDeviceId) {
+    await meshChannel.send({
+      type: 'broadcast',
+      event: `response-${fromDeviceId}`,
+      payload: { transferId, status, toDeviceId, fromDeviceId }
     });
-  } catch (err) {}
+  }
+}
 
-  try {
-    await sendCloudTransferResponse({ transferId, status, toDeviceId, fromDeviceId });
-  } catch (err) {}
+export function subscribeToTransferResponses(
+  localDeviceId: string,
+  onResponse: (transferId: string, status: 'accepted'|'declined', toDeviceId: string) => void
+): () => void {
+  if (!meshChannel) {
+    meshChannel = supabase.channel('nearby-mesh');
+    meshChannel.subscribe();
+  }
+
+  meshChannel.on('broadcast', { event: `response-${localDeviceId}` }, (payload) => {
+    const data = payload.payload;
+    if (data.transferId && data.status && data.toDeviceId) {
+      onResponse(data.transferId, data.status, data.toDeviceId);
+    }
+  });
+
+  return () => {};
 }
 
 export function triggerDirectDownload(file: { name: string; content: string; mimeType?: string }): void {
   try {
     const { name, content, mimeType } = file;
-    let objectUrl = '';
-
-    if (content.startsWith('data:')) {
-      objectUrl = content;
-    } else {
-      const blob = new Blob([content], { type: mimeType || 'application/octet-stream' });
-      objectUrl = URL.createObjectURL(blob);
-    }
-
+    let objectUrl = content.startsWith('data:') ? content : URL.createObjectURL(new Blob([content], { type: mimeType || 'application/octet-stream' }));
     const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = name || 'file';
-    link.target = '-blank';
-    document.body.appendChild(link);
-    link.click();
+    link.href = objectUrl; link.download = name || 'file'; link.target = '-blank';
+    document.body.appendChild(link); link.click();
     setTimeout(() => {
-      try {
-        if (link.parentNode) {
-          link.parentNode.removeChild(link);
-        }
-        if (objectUrl && !objectUrl.startsWith('data:')) {
-          URL.revokeObjectURL(objectUrl);
-        }
-      } catch {}
+      if (link.parentNode) link.parentNode.removeChild(link);
+      if (!objectUrl.startsWith('data:')) URL.revokeObjectURL(objectUrl);
     }, 500);
-  } catch (err) {
-    console.error('File download failed:', err);
-  }
+  } catch (err) { console.error('Download failed:', err); }
 }

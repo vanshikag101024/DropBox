@@ -1,16 +1,10 @@
 import { DropPayload, GlobalTelemetryStats } from '../types';
-import {
-  getTelemetryStatsFromFirestore,
-  recordDownloadedFileInFirestore,
-  recordSentTransferInFirestore,
-  recordRatingInFirestore,
-  subscribeToTelemetryStats,
-  saveDropToFirestore,
-  consumeDropInFirestore,
-  deleteDropFromFirestore,
-} from './firebase';
+import { supabase } from './supabase';
 
-
+/**
+ * Try to extract drop data embedded in the current URL hash.
+ * Links encode the drop payload as base64 in &data=... for zero-server fallback.
+ */
 function extractDropFromHash(id: string): DropPayload | null {
   try {
     const hash = window.location.hash;
@@ -18,7 +12,8 @@ function extractDropFromHash(id: string): DropPayload | null {
     const params = new URLSearchParams(hash.replace(/^#/, ''));
     const encodedData = params.get('data');
     if (!encodedData) return null;
-    const jsonStr = decodeURIComponent(atob(decodeURIComponent(encodedData)));
+    const decoded = decodeURIComponent(encodedData);
+    const jsonStr = decodeURIComponent(atob(decoded));
     const drop = JSON.parse(jsonStr) as DropPayload;
     if (drop && drop.id) {
       return drop;
@@ -30,16 +25,21 @@ function extractDropFromHash(id: string): DropPayload | null {
 export const dropApi = {
   async getStats(): Promise<GlobalTelemetryStats> {
     try {
-      const res = await fetch('/api/stats');
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch { }
-
-    try {
-      const firestoreStats = await getTelemetryStatsFromFirestore();
-      if (firestoreStats) {
-        return firestoreStats;
+      const { data, error } = await supabase
+        .from('telemetry_stats')
+        .select('*')
+        .eq('id', 'global')
+        .single();
+        
+      if (!error && data) {
+        return {
+          downloadedFiles: data.downloadedFiles || 0,
+          sentTransfers: data.sentTransfers || 0,
+          gigabytesSent: data.gigabytesSent || 0,
+          bytesSent: data.bytesSent || 0,
+          rating: Number(data.rating) || 5.0,
+          ratingsCount: data.ratingsCount || 0,
+        };
       }
     } catch { }
 
@@ -54,25 +54,64 @@ export const dropApi = {
   },
 
   subscribeStats(callback: (stats: GlobalTelemetryStats) => void): () => void {
-    return subscribeToTelemetryStats(callback);
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'telemetry_stats',
+        },
+        (payload) => {
+          const data = payload.new;
+          if (data && data.id === 'global') {
+            callback({
+              downloadedFiles: data.downloadedFiles || 0,
+              sentTransfers: data.sentTransfers || 0,
+              gigabytesSent: data.gigabytesSent || 0,
+              bytesSent: data.bytesSent || 0,
+              rating: Number(data.rating) || 5.0,
+              ratingsCount: data.ratingsCount || 0,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   },
 
   async submitRating(rating: number): Promise<GlobalTelemetryStats | null> {
     try {
-      const res = await fetch('/api/ratings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.stats) return data.stats;
-      }
-    } catch { }
+      const current = await this.getStats();
+      const currentRating = current.rating || 5.0;
+      const count = current.ratingsCount || 0;
+      const newCount = count + 1;
+      const newRating = ((currentRating * count) + rating) / newCount;
 
-    try {
-      const updated = await recordRatingInFirestore(rating);
-      if (updated) return updated;
+      const { data, error } = await supabase
+        .from('telemetry_stats')
+        .update({
+          rating: newRating,
+          ratingsCount: newCount
+        })
+        .eq('id', 'global')
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          downloadedFiles: data.downloadedFiles || 0,
+          sentTransfers: data.sentTransfers || 0,
+          gigabytesSent: data.gigabytesSent || 0,
+          bytesSent: data.bytesSent || 0,
+          rating: Number(data.rating) || 5.0,
+          ratingsCount: data.ratingsCount || 0,
+        };
+      }
     } catch { }
 
     return null;
@@ -80,31 +119,43 @@ export const dropApi = {
 
   async listDrops(): Promise<DropPayload[]> {
     try {
-      const res = await fetch('/api/drops');
-      if (res.ok) {
-        return await res.json();
+      const { data, error } = await supabase
+        .from('drops')
+        .select('*')
+        .eq('status', 'active');
+        
+      if (!error && data) {
+        return data as DropPayload[];
       }
     } catch { }
     return [];
   },
 
   async getDrop(id: string): Promise<DropPayload> {
+    // 1. Try Supabase
     try {
-      const res = await fetch(`/api/drops/${encodeURIComponent(id)}`);
-      if (res.ok) {
-        const drop = await res.json();
-        try {
-          localStorage.setItem(`ephem-drop-${id}`, JSON.stringify(drop));
-        } catch { }
-        return drop;
+      const { data, error } = await supabase
+        .from('drops')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error && error.code === 'PGRST116') {
+        throw new Error('Drop has expired or not found.');
       }
-      if (res.status === 410) {
-        throw new Error('Drop has expired.');
+
+      if (data) {
+        // Cache in localStorage for future access
+        try {
+          localStorage.setItem(`ephem-drop-${id}`, JSON.stringify(data));
+        } catch { }
+        return data as DropPayload;
       }
     } catch (err: any) {
       if (err?.message?.includes('expired')) throw err;
     }
 
+    // 2. Try localStorage (works same browser)
     try {
       const cached = localStorage.getItem(`ephem-drop-${id}`);
       if (cached) {
@@ -116,6 +167,7 @@ export const dropApi = {
       }
     } catch { }
 
+    // 3. Try hash-embedded data
     const hashDrop = extractDropFromHash(id);
     if (hashDrop) {
       try {
@@ -128,23 +180,22 @@ export const dropApi = {
   },
 
   async createDrop(drop: Partial<DropPayload>): Promise<DropPayload> {
-    let createdDrop: DropPayload | null = null;
+    const payload = drop as DropPayload;
 
+    // 1. Save to Supabase DB (supports up to ~1GB per row if configured, definitely handles 100MB base64 easily in Postgres)
     try {
-      const res = await fetch('/api/drops', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(drop),
-      });
-      if (res.ok) {
-        createdDrop = await res.json();
+      const { error } = await supabase
+        .from('drops')
+        .insert(payload);
+        
+      if (error) {
+        console.warn('Supabase drop creation error:', error);
       }
     } catch (err) {
-      console.debug('Server drop creation notice:', err);
+      console.warn('Supabase drop creation notice:', err);
     }
 
-    const payload = (createdDrop || drop) as DropPayload;
-
+    // 2. Save to localStorage (reliable local backup, up to 5MB)
     try {
       const jsonStr = JSON.stringify(payload);
       if (jsonStr.length < 5000000) {
@@ -152,31 +203,72 @@ export const dropApi = {
       }
     } catch { }
 
-    saveDropToFirestore(payload).catch(() => { });
-    recordSentTransferInFirestore(payload.sizeBytes || 0).catch(() => { });
+    // Update telemetry
+    try {
+      const current = await this.getStats();
+      const currentBytes = current.bytesSent || 0;
+      const currentTransfers = current.sentTransfers || 0;
+      const newBytes = currentBytes + (payload.sizeBytes || 0);
+      const newGB = Math.floor(newBytes / (1024 * 1024 * 1024));
+
+      await supabase
+        .from('telemetry_stats')
+        .update({
+          sentTransfers: currentTransfers + 1,
+          bytesSent: newBytes,
+          gigabytesSent: newGB
+        })
+        .eq('id', 'global');
+    } catch { }
 
     return payload;
   },
 
   async consumeDrop(id: string): Promise<DropPayload | null> {
-    let result: DropPayload | null = null;
     try {
-      const res = await fetch(`/api/drops/${encodeURIComponent(id)}/consume`, { method: 'POST' });
-      if (res.ok) {
-        result = await res.json();
+      // Fetch drop
+      const { data: dropData } = await supabase
+        .from('drops')
+        .select('*')
+        .eq('id', id)
+        .single();
+        
+      if (dropData) {
+        const drop = dropData as DropPayload;
+        const consumed = (drop.transfersConsumed || 0) + 1;
+        
+        // If it reached max views or is expired, mark it burned/deleted
+        if (consumed >= (drop.transfersMax || 1) || (drop.expiresAt && drop.expiresAt < Date.now())) {
+          await supabase.from('drops').delete().eq('id', id);
+        } else {
+          await supabase.from('drops').update({ transfersConsumed: consumed }).eq('id', id);
+        }
+
+        // Update telemetry
+        const current = await this.getStats();
+        await supabase
+          .from('telemetry_stats')
+          .update({
+            downloadedFiles: (current.downloadedFiles || 0) + 1,
+          })
+          .eq('id', 'global');
+
+        return drop;
       }
     } catch { }
-    recordDownloadedFileInFirestore().catch(() => { });
-    consumeDropInFirestore(id).catch(() => { });
-    return result;
+    return null;
   },
 
   async deleteDrop(id: string): Promise<void> {
-    fetch(`/api/drops/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => { });
-    deleteDropFromFirestore(id).catch(() => { });
+    try {
+      await supabase.from('drops').delete().eq('id', id);
+    } catch { }
   },
 
   getDownloadUrl(id: string): string {
+    // For direct raw download, we still return the local route if running locally,
+    // but on a static site, this won't work well without the backend. 
+    // We can fallback to the client-side download logic that reads the payload.
     return `/api/drops/${encodeURIComponent(id)}/download`;
   },
 };
