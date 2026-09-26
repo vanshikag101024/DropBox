@@ -405,8 +405,8 @@ setInterval(() => {
 async function startServer() {
   const app = express();
 
-  app.use(express.json({ limit: '50mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  app.use(express.json({ limit: '500mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '500mb' }));
 
   function getActiveReceivingDevices(): NearbyDeviceRecord[] {
     const now = Date.now();

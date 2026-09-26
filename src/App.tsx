@@ -26,7 +26,7 @@ import {
   respondToNearbyTransfer,
 } from './utils/nearbyService';
 import { dropApi } from './services/dropApi';
-import { subscribeToCloudPresence, subscribeToCloudOffers } from './services/firebase';
+import { subscribeToCloudPresence, subscribeToCloudOffers, subscribeToCloudResponses } from './services/firebase';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 function AppContent() {
@@ -142,11 +142,16 @@ function AppContent() {
       showToast(`Incoming file from ${offer.fromDevice.name}!`);
     });
 
+    const unsubCloudResponses = subscribeToCloudResponses(localDevice.id, (resData) => {
+      setnearbyTransferResponse(resData);
+    });
+
     return () => {
       clearInterval(interval);
       unsubMesh();
       unsubCloudPresence();
       unsubCloudOffers();
+      unsubCloudResponses();
       leavePresence(localDevice.id);
     };
   }, [localDevice, showToast]);

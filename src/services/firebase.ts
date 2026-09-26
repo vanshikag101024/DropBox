@@ -184,42 +184,49 @@ export async function recordRatingInFirestore(ratingValue: number): Promise<Glob
   }
 }
 
-const CHUNK_SIZE = 600000;
+const CHUNK_SIZE = 500000;
 
 export async function saveDropToFirestore(drop: DropPayload): Promise<void> {
   try {
-    const content = drop.content || '';
     const docRef = doc(db, DROPS_COLLECTION, drop.id);
+    const jsonStr = JSON.stringify(drop);
 
-    if (content.length > CHUNK_SIZE) {
-      const chunksCount = Math.ceil(content.length / CHUNK_SIZE);
+    if (jsonStr.length > CHUNK_SIZE) {
+      const chunksCount = Math.ceil(jsonStr.length / CHUNK_SIZE);
       const metaPayload = {
-        ...drop,
-        content: '',
-        isChunked: true,
+        id: drop.id,
+        name: drop.name || 'Untitled',
+        type: drop.type || 'File',
+        sizeBytes: drop.sizeBytes || 0,
+        expiresAt: drop.expiresAt || 0,
+        expirationPolicy: drop.expirationPolicy || '1d',
+        transfersConsumed: drop.transfersConsumed || 0,
+        transfersMax: drop.transfersMax || 25,
+        isJsonChunked: true,
         chunksCount,
         savedAt: Date.now(),
       };
       await setDoc(docRef, metaPayload);
 
-      for (let i = 0; i < chunksCount; i++) {
-        const chunkStr = content.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-        const chunkRef = doc(db, `${DROPS_COLLECTION}_chunks`, `${drop.id}_chunk_${i}`);
-        await setDoc(chunkRef, {
-          dropId: drop.id,
-          index: i,
-          data: chunkStr,
-        });
+      const BATCH_SIZE = 15;
+      for (let i = 0; i < chunksCount; i += BATCH_SIZE) {
+        const batchPromises = [];
+        for (let j = i; j < Math.min(i + BATCH_SIZE, chunksCount); j++) {
+          const chunkData = jsonStr.slice(j * CHUNK_SIZE, (j + 1) * CHUNK_SIZE);
+          const chunkRef = doc(db, `${DROPS_COLLECTION}_chunks`, `${drop.id}_c_${j}`);
+          batchPromises.push(setDoc(chunkRef, { dropId: drop.id, index: j, data: chunkData }));
+        }
+        await Promise.all(batchPromises);
       }
     } else {
       await setDoc(docRef, {
         ...drop,
-        isChunked: false,
+        isJsonChunked: false,
         savedAt: Date.now(),
       });
     }
   } catch (err) {
-    console.warn('saveDropToFirestore warning:', err);
+    console.error('saveDropToFirestore warning:', err);
   }
 }
 
@@ -245,28 +252,32 @@ export async function getDropFromFirestore(id: string): Promise<DropPayload | nu
       return null;
     }
 
-    if (data.isChunked && data.chunksCount > 0) {
-      const chunkPromises = [];
-      for (let i = 0; i < data.chunksCount; i++) {
-        const chunkRef = doc(db, `${DROPS_COLLECTION}_chunks`, `${id}_chunk_${i}`);
-        chunkPromises.push(getDoc(chunkRef));
-      }
-      const chunkSnaps = await Promise.all(chunkPromises);
-      let fullContent = '';
-      for (const chunkSnap of chunkSnaps) {
-        if (chunkSnap.exists()) {
-          fullContent += chunkSnap.data().data || '';
+    if (data.isJsonChunked && data.chunksCount > 0) {
+      const BATCH_SIZE = 20;
+      let fullJson = '';
+      for (let i = 0; i < data.chunksCount; i += BATCH_SIZE) {
+        const batchPromises = [];
+        for (let j = i; j < Math.min(i + BATCH_SIZE, data.chunksCount); j++) {
+          const chunkRef = doc(db, `${DROPS_COLLECTION}_chunks`, `${id}_c_${j}`);
+          batchPromises.push(getDoc(chunkRef));
+        }
+        const chunkSnaps = await Promise.all(batchPromises);
+        for (const chunkSnap of chunkSnaps) {
+          if (chunkSnap.exists()) {
+            fullJson += chunkSnap.data().data || '';
+          }
         }
       }
-      return {
-        ...data,
-        content: fullContent,
-      } as DropPayload;
+      if (fullJson) {
+        const parsed = JSON.parse(fullJson) as DropPayload;
+        parsed.transfersConsumed = data.transfersConsumed ?? parsed.transfersConsumed;
+        return parsed;
+      }
     }
 
     return data as DropPayload;
   } catch (err) {
-    console.warn('getDropFromFirestore error:', err);
+    console.error('getDropFromFirestore error:', err);
     return null;
   }
 }
@@ -277,9 +288,9 @@ export async function deleteDropFromFirestore(id: string): Promise<void> {
     const snap = await getDoc(docRef).catch(() => null);
     if (snap && snap.exists()) {
       const data = snap.data();
-      if (data.isChunked && data.chunksCount) {
+      if (data.isJsonChunked && data.chunksCount) {
         for (let i = 0; i < data.chunksCount; i++) {
-          deleteDoc(doc(db, `${DROPS_COLLECTION}_chunks`, `${id}_chunk_${i}`)).catch(() => {});
+          deleteDoc(doc(db, `${DROPS_COLLECTION}_chunks`, `${id}_c_${i}`)).catch(() => {});
         }
       }
     }
@@ -359,6 +370,7 @@ export async function purgeExpiredDropsFromFirestore(): Promise<number> {
 
 export const NEARBY_COLLECTION = 'ephemeral-vault-nearby';
 export const OFFERS_COLLECTION = 'ephemeral-vault-offers';
+export const RESPONSES_COLLECTION = 'ephemeral-vault-responses';
 
 export async function announcePresenceInCloud(device: any, isReceiving: boolean = false): Promise<any[]> {
   try {
@@ -454,4 +466,42 @@ export async function sendCloudTransferOffer(offerPayload: any): Promise<boolean
     console.warn('Send cloud transfer offer error:', err);
     return false;
   }
+}
+
+export async function sendCloudTransferResponse(responsePayload: any): Promise<boolean> {
+  try {
+    const id = responsePayload.transferId || `tx-res-${Date.now()}`;
+    const docRef = doc(db, RESPONSES_COLLECTION, id);
+    await setDoc(docRef, {
+      ...responsePayload,
+      timestamp: Date.now(),
+    });
+    return true;
+  } catch (err) {
+    console.warn('Send cloud transfer response error:', err);
+    return false;
+  }
+}
+
+export function subscribeToCloudResponses(
+  localDeviceId: string,
+  onResponse: (response: any) => void
+): () => void {
+  const colRef = collection(db, RESPONSES_COLLECTION);
+  const q = query(colRef, where('fromDeviceId', '==', localDeviceId));
+  return onSnapshot(
+    q,
+    (snap) => {
+      for (const change of snap.docChanges()) {
+        if (change.type === 'added') {
+          const resData = change.doc.data();
+          onResponse(resData);
+          deleteDoc(change.doc.ref).catch(() => {});
+        }
+      }
+    },
+    (err) => {
+      console.warn('Cloud responses subscription warning:', err);
+    }
+  );
 }

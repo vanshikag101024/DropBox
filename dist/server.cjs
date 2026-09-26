@@ -328,8 +328,8 @@ setInterval(() => {
 }, 4e3);
 async function startServer() {
   const app = (0, import_express.default)();
-  app.use(import_express.default.json({ limit: "50mb" }));
-  app.use(import_express.default.urlencoded({ extended: true, limit: "50mb" }));
+  app.use(import_express.default.json({ limit: "500mb" }));
+  app.use(import_express.default.urlencoded({ extended: true, limit: "500mb" }));
   function getActiveReceivingDevices() {
     const now = Date.now();
     return Array.from(nearbyDevicesMap.values()).filter(

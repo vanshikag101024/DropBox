@@ -1,5 +1,5 @@
 import { NearbyDevice, NearbyTransferOffer } from '../types';
-import { announcePresenceInCloud, sendCloudTransferOffer } from '../services/firebase';
+import { announcePresenceInCloud, sendCloudTransferOffer, sendCloudTransferResponse } from '../services/firebase';
 
 const COLORS = [
   '#f97316',
@@ -291,17 +291,21 @@ export async function pollIncomingNearbyOffers(
 
 export async function respondToNearbyTransfer(
   transferId: string,
-  status: 'accepted' | 'declined'
+  status: 'accepted' | 'declined',
+  toDeviceId?: string,
+  fromDeviceId?: string
 ): Promise<void> {
   try {
     await fetch(`/api/nearby/transfer/${encodeURIComponent(transferId)}/respond`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ transferId, status, toDeviceId, fromDeviceId }),
     });
-  } catch (err) {
-    console.warn('Respond to nearby transfer failed:', err);
-  }
+  } catch (err) {}
+
+  try {
+    await sendCloudTransferResponse({ transferId, status, toDeviceId, fromDeviceId });
+  } catch (err) {}
 }
 
 export function triggerDirectDownload(file: { name: string; content: string; mimeType?: string }): void {

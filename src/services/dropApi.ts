@@ -129,7 +129,10 @@ export const dropApi = {
     }
 
     try {
-      localStorage.setItem(`ephem-drop-${payload.id}`, JSON.stringify(payload));
+      const jsonStr = JSON.stringify(payload);
+      if (jsonStr.length < 2000000) {
+        localStorage.setItem(`ephem-drop-${payload.id}`, jsonStr);
+      }
     } catch {}
 
     try {

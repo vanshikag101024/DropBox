@@ -53,7 +53,7 @@ export const IncomingNearbyTransferModal: React.FC<IncomingNearbyTransferModalPr
 
   const handleDecline = async () => {
     try {
-      await respondToNearbyTransfer(offer.transferId, 'declined');
+      await respondToNearbyTransfer(offer.transferId, 'declined', offer.toDeviceId, offer.fromDevice.id);
     } catch {}
     onShowToast(`Declined transfer from ${fromDevice.name}`);
     onClose();
@@ -79,7 +79,7 @@ export const IncomingNearbyTransferModal: React.FC<IncomingNearbyTransferModalPr
             content: file.content,
             mimeType: file.mimeType,
           });
-        respondToNearbyTransfer(offer.transferId, 'accepted');
+          respondToNearbyTransfer(offer.transferId, 'accepted', offer.toDeviceId, offer.fromDevice.id);
         } catch (err) {
           console.warn('Accept error:', err);
         }
