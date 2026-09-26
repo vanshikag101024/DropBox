@@ -6,6 +6,7 @@ import {
   recordRatingInFirestore,
   subscribeToTelemetryStats,
   listActiveDropsFromFirestore,
+  saveDropToFirestore,
   getDropFromFirestore,
   consumeDropInFirestore,
   deleteDropFromFirestore,
@@ -81,20 +82,26 @@ export const dropApi = {
       if (res.ok) {
         return await res.json();
       }
-      if (res.status === 404 || res.status === 410) {
-        throw new Error('Drop expired or not found');
-      }
-    } catch (err: any) {
-      if (err.message === 'Drop expired or not found') {
-        throw err;
-      }
-    }
+    } catch (err: any) {}
 
-    const firestoreDrop = await getDropFromFirestore(id);
-    if (!firestoreDrop) {
-      throw new Error('Drop expired or not found');
-    }
-    return firestoreDrop;
+    try {
+      const firestoreDrop = await getDropFromFirestore(id);
+      if (firestoreDrop) {
+        return firestoreDrop;
+      }
+    } catch {}
+
+    try {
+      const cached = localStorage.getItem(`ephem-drop-${id}`);
+      if (cached) {
+        const parsed = JSON.parse(cached) as DropPayload;
+        if (!parsed.expiresAt || parsed.expiresAt > Date.now()) {
+          return parsed;
+        }
+      }
+    } catch {}
+
+    throw new Error('Drop expired or not found');
   },
 
   async createDrop(drop: Partial<DropPayload>): Promise<DropPayload> {
@@ -114,6 +121,16 @@ export const dropApi = {
     }
 
     const payload = (createdDrop || drop) as DropPayload;
+
+    try {
+      await saveDropToFirestore(payload);
+    } catch (err) {
+      console.warn('Failed to save drop to Firestore:', err);
+    }
+
+    try {
+      localStorage.setItem(`ephem-drop-${payload.id}`, JSON.stringify(payload));
+    } catch {}
 
     try {
       await recordSentTransferInFirestore(payload.sizeBytes || 0);

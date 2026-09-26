@@ -85,14 +85,14 @@ function AppContent() {
 
     announcePresence(localDevice, isReceivingActiveRef.current).then((devs) => {
       if (devs) {
-        setnearbyDevices(devs.filter((d) => d.id !== localDevice.id && Boolean(d.isReceiving)));
+        setnearbyDevices(devs.filter((d) => d.id !== localDevice.id));
       }
     });
 
     const interval = setInterval(() => {
       announcePresence(localDevice, isReceivingActiveRef.current).then((devs) => {
         if (devs) {
-          setnearbyDevices(devs.filter((d) => d.id !== localDevice.id && Boolean(d.isReceiving)));
+          setnearbyDevices(devs.filter((d) => d.id !== localDevice.id));
         }
       });
     }, 3000);
@@ -101,9 +101,6 @@ function AppContent() {
       (discoveredDev) => {
         setnearbyDevices((prev) => {
           const filtered = prev.filter((d) => d.id !== discoveredDev.id);
-          if (!discoveredDev.isReceiving) {
-            return filtered;
-          }
           return [...filtered, discoveredDev];
         });
       },
@@ -112,10 +109,7 @@ function AppContent() {
       },
       (deviceId, isReceiving) => {
         setnearbyDevices((prev) => {
-          if (!isReceiving) {
-            return prev.filter((d) => d.id !== deviceId);
-          }
-          return prev.map((d) => (d.id === deviceId ? { ...d, isReceiving: true } : d));
+          return prev.map((d) => (d.id === deviceId ? { ...d, isReceiving } : d));
         });
       },
       () => ({ device: localDevice, isReceiving: isReceivingActiveRef.current })
@@ -206,18 +200,18 @@ function AppContent() {
             });
           } else if (data.type === 'stats_update' && data.payload) {
             setGlobalStats(data.payload);
-          } else if (data.type === 'nearby_devices') {
+          } else if ((data.type === 'nearby_devices' || data.type === 'nearby-devices') && data.payload) {
             const activeReceivers = (data.payload || []).filter(
-              (d: NearbyDevice) => d.id !== localDevice.id && Boolean(d.isReceiving)
+              (d: NearbyDevice) => d.id !== localDevice.id
             );
             setnearbyDevices(activeReceivers);
-          } else if (data.type === 'nearby_transfer_offer') {
+          } else if ((data.type === 'nearby_transfer_offer' || data.type === 'nearby-transfer-offer') && data.payload) {
             const offer = data.payload as NearbyTransferOffer;
             if (offer && offer.toDeviceId === localDevice.id) {
               setIncomingOffer(offer);
               showToast(`Incoming file from ${offer.fromDevice.name}!`);
             }
-        } else if (data.type === 'nearby_transfer_response') {
+          } else if ((data.type === 'nearby_transfer_response' || data.type === 'nearby-transfer-response') && data.payload) {
             setnearbyTransferResponse(data.payload);
           }
         } catch (e) {

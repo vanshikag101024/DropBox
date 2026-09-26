@@ -502,7 +502,7 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
       expiresAt = Date.now() + 7 * 24 * 3600 * 1000;
     } else if (expirationPolicy === 'never') {
       expiresInText = 'Single access (burn on read)';
-      expiresAt = Date.now() + 24 * 3600 * 1000;
+      expiresAt = 0;
     }
 
     const mimeType =

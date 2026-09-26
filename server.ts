@@ -85,8 +85,15 @@ interface DropPayload {
 const PORT = 3000;
 
 const dropsMap = new Map<string, DropPayload>();
-const STORAGE_FILE = path.join('/tmp', 'ephem-drops-store.json');
-const STATS_STORAGE_FILE = path.join('/tmp', 'ephem-stats-store.json');
+const DATA_DIR = path.join(process.cwd(), '.data');
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch {}
+
+const STORAGE_FILE = path.join(DATA_DIR, 'ephem-drops-store.json');
+const STATS_STORAGE_FILE = path.join(DATA_DIR, 'ephem-stats-store.json');
 const FIRESTORE_COLLECTION = 'ephemeral-vault-drops';
 let firestoreDb: Firestore | null = null;
 
@@ -404,7 +411,7 @@ async function startServer() {
   function getActiveReceivingDevices(): NearbyDeviceRecord[] {
     const now = Date.now();
     return Array.from(nearbyDevicesMap.values()).filter(
-      (d) => Boolean(d.isReceiving) && now - d.lastSeen < 18000
+      (d) => now - d.lastSeen < 30000
     );
   }
 
@@ -477,9 +484,9 @@ async function startServer() {
     }
 
     const targetDevice = nearbyDevicesMap.get(toDeviceId);
-    if (!targetDevice || !targetDevice.isReceiving || Date.now() - targetDevice.lastSeen > 30000) {
+    if (!targetDevice || Date.now() - targetDevice.lastSeen > 30000) {
       return res.status(400).json({
-        error: 'Target device is not currently in Live Receive mode. Please make sure the recipient has opened Receive > Live.',
+        error: 'Target device is not currently active on the network.',
       });
     }
 
@@ -615,7 +622,7 @@ async function startServer() {
       } else if (expirationPolicy === '7d') {
         expiresAt = Date.now() + 7 * 24 * 3600 * 1000;
       } else if (expirationPolicy === 'never') {
-        expiresAt = Date.now() + 24 * 3600 * 1000;
+        expiresAt = 0;
       }
 
       const newDrop: DropPayload = {

@@ -60,7 +60,7 @@ export const NearbyRadarView: React.FC<NearbyRadarViewProps> = ({
   const [customName, setCustomName] = useState(localDevice.name);
 
   const otherDevices = nearbyDevices.filter(
-    (d) => d.id !== localDevice.id && Boolean(d.isReceiving)
+    (d) => d.id !== localDevice.id
   );
 
   const handleSaveName = (e: React.FormEvent) => {

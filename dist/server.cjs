@@ -62,8 +62,15 @@ process.on("unhandledRejection", (reason) => {
 });
 var PORT = 3e3;
 var dropsMap = /* @__PURE__ */ new Map();
-var STORAGE_FILE = import_path.default.join("/tmp", "ephem-drops-store.json");
-var STATS_STORAGE_FILE = import_path.default.join("/tmp", "ephem-stats-store.json");
+var DATA_DIR = import_path.default.join(process.cwd(), ".data");
+try {
+  if (!import_fs.default.existsSync(DATA_DIR)) {
+    import_fs.default.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch {
+}
+var STORAGE_FILE = import_path.default.join(DATA_DIR, "ephem-drops-store.json");
+var STATS_STORAGE_FILE = import_path.default.join(DATA_DIR, "ephem-stats-store.json");
 var FIRESTORE_COLLECTION = "ephemeral-vault-drops";
 var firestoreDb = null;
 try {
@@ -326,7 +333,7 @@ async function startServer() {
   function getActiveReceivingDevices() {
     const now = Date.now();
     return Array.from(nearbyDevicesMap.values()).filter(
-      (d) => Boolean(d.isReceiving) && now - d.lastSeen < 18e3
+      (d) => now - d.lastSeen < 3e4
     );
   }
   app.get("/api/events", (req, res) => {
@@ -396,9 +403,9 @@ async function startServer() {
       return res.status(400).json({ error: "Target device ID and file required" });
     }
     const targetDevice = nearbyDevicesMap.get(toDeviceId);
-    if (!targetDevice || !targetDevice.isReceiving || Date.now() - targetDevice.lastSeen > 3e4) {
+    if (!targetDevice || Date.now() - targetDevice.lastSeen > 3e4) {
       return res.status(400).json({
-        error: "Target device is not currently in Live Receive mode. Please make sure the recipient has opened Receive > Live."
+        error: "Target device is not currently active on the network."
       });
     }
     const txId = transferId || `nb-tx-${Date.now()}`;
@@ -510,7 +517,7 @@ async function startServer() {
       } else if (expirationPolicy === "7d") {
         expiresAt = Date.now() + 7 * 24 * 3600 * 1e3;
       } else if (expirationPolicy === "never") {
-        expiresAt = Date.now() + 24 * 3600 * 1e3;
+        expiresAt = 0;
       }
       const newDrop = {
         id,
