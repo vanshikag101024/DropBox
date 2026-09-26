@@ -210,12 +210,11 @@ export const NearbyRadarView: React.FC<NearbyRadarViewProps> = ({
         <motion.div          initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium font-sans ${
-            transferSuccessDeviceId || successViewData.toLowerCase().includes('successful'
-            )
+            transferSuccessDeviceId || successViewData.toLowerCase().includes('successful')
               ? 'bg-slate-900 text-white font-semibold'
               : successViewData.toLowerCase().includes('decline')
               ? 'bg-rose-50 border border-rose-200 text-rose-800 font-semibold'
-              : 'bg-amber-50 border border-amber-200 text-amber-800'
+              : 'bg-white border border-slate-200 text-slate-700'
           }`}
         >
           {transferSuccessDeviceId || successViewData.toLowerCase().includes('successful') ? (
@@ -225,11 +224,14 @@ export const NearbyRadarView: React.FC<NearbyRadarViewProps> = ({
           ) : successViewData.toLowerCase().includes('decline') ? (
             <span className="material-symbols-outlined text-[16px] text-rose-600">
               cancel
-            </span>          ) : (
+            </span>
+          ) : (
             <span className="material-symbols-outlined text-[16px] animate-spin">
-            progress_activity
-            </span>          )}
-          <span>{successViewData}</span>        </motion.div>
+              sync
+            </span>
+          )}
+          <span>{successViewData}</span>
+        </motion.div>
       )}
 
       <div className="w-full">
@@ -265,7 +267,7 @@ export const NearbyRadarView: React.FC<NearbyRadarViewProps> = ({
                     isDelivered
                     ? 'border-slate-400 bg-slate-50 shadow-xs'
                       : isSending
-                      ? 'border-amber-400 bg-amber-50/50 shadow-xs'
+                      ? 'border-slate-300 bg-slate-50 shadow-xs'
                       : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-2xs'
                   }`}
                 >
@@ -297,9 +299,9 @@ export const NearbyRadarView: React.FC<NearbyRadarViewProps> = ({
                           <span className="material-symbols-outlined text-[15px]">
                             check-circle
                           </span>                          <span>Delivered!</span>                        </div>                      ) : isSending ? (
-                        <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100 text-amber-800 text-xs font-medium font-sans">
+                        <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-700 shadow-xs text-xs font-medium font-sans">
                           <span className="material-symbols-outlined text-[15px] animate-spin">
-                            progress-activity
+                            sync
                           </span>                          <span>Sending</span>                        </div>                      ) : (
                         <button
                           type="button"

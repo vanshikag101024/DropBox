@@ -24,6 +24,18 @@ import { sendNearbyTransferOffer } from '../utils/nearbyService';
 import { FolderConfirmationModal } from './FolderConfirmationModal';
 import { SuccessView } from './SuccessView';
 import { GlobalTelemetry } from './GlobalTelemetry';
+import { supabase } from '../services/supabase';
+
+function dataURItoBlob(dataURI: string) {
+  const byteString = atob(dataURI.split(',')[1]);
+  const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mimeString });
+}
 
 async function readDirectoryEntries(dirEntry: any, outFiles: File[]): Promise<void> {
   const reader = dirEntry.createReader();
@@ -425,6 +437,20 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
       return;
     }
 
+    const dropId = `nb-${Date.now()}`;
+    let finalContent = selectedFiles[0]?.content || '';
+    
+    if (activeInputType !== 'text' && finalContent.startsWith('data:')) {
+      try {
+        const blob = dataURItoBlob(finalContent);
+        const filePath = `${dropId}/${selectedFiles[0].name}`;
+        await supabase.storage.from('drop_files').upload(filePath, blob);
+        finalContent = supabase.storage.from('drop_files').getPublicUrl(filePath).data.publicUrl;
+      } catch (err) {
+        console.warn('Storage upload failed for nearby', err);
+      }
+    }
+
     const primaryFile =
       activeInputType === 'text'
         ? {
@@ -439,7 +465,7 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
             sizeBytes: selectedFiles[0].sizeBytes,
             type: selectedFiles[0].type || 'file',
             mimeType: selectedFiles[0].mimeType || 'application/octet-stream',
-            content: selectedFiles[0].content,
+            content: finalContent,
           };
 
     handledResponseTransferIdRef.current = null;
@@ -473,10 +499,35 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
 
     setIsGenerating(true);
 
-    const primaryContent =
+    const shortNum = Math.floor(1000 + Math.random() * 9000);
+    const suffix = ['q', 'x', 'a', 'z', 'w', 'k'][Math.floor(Math.random() * 6)];
+    const dropId = `EPHEM-${shortNum}-${suffix}`;
+
+    let primaryContent =
       activeInputType === 'text'
         ? bufferText
         : selectedFiles[0]?.content || '';
+
+    let finalFiles = selectedFiles;
+    if (activeInputType !== 'text') {
+      try {
+        finalFiles = await Promise.all(selectedFiles.map(async (f) => {
+          if (f.content.startsWith('data:')) {
+            const blob = dataURItoBlob(f.content);
+            const filePath = `${dropId}/${f.name}`;
+            await supabase.storage.from('drop_files').upload(filePath, blob);
+            const publicUrl = supabase.storage.from('drop_files').getPublicUrl(filePath).data.publicUrl;
+            return { ...f, content: publicUrl };
+          }
+          return f;
+        }));
+        if (finalFiles.length > 0) {
+          primaryContent = finalFiles[0].content;
+        }
+      } catch (err) {
+        console.warn('Storage upload failed', err);
+      }
+    }
 
     const name = payloadDescriptor.trim()
       ? payloadDescriptor.trim()
@@ -488,9 +539,7 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
 
     const rawSha256 = await computeSha256(primaryContent);
     const key = generateCryptoKey();
-    const shortNum = Math.floor(1000 + Math.random() * 9000);
-    const suffix = ['q', 'x', 'a', 'z', 'w', 'k'][Math.floor(Math.random() * 6)];
-    const dropId = `EPHEM-${shortNum}-${suffix}`;
+
 
     let expiresInText = '23h 59m';
     let expiresAt = Date.now() + 24 * 3600 * 1000;
@@ -528,7 +577,7 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
       mimeType,
       sizeBytes: payloadBytes,
       content: primaryContent,
-      files: activeInputType === 'text' ? undefined : selectedFiles,
+      files: activeInputType === 'text' ? undefined : finalFiles,
       createdTimeAgo: 'Just now',
       createdAt: Date.now(),
       expiresInText,

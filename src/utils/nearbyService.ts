@@ -207,13 +207,16 @@ export function subscribeToTransferResponses(
 export function triggerDirectDownload(file: { name: string; content: string; mimeType?: string }): void {
   try {
     const { name, content, mimeType } = file;
-    let objectUrl = content.startsWith('data:') ? content : URL.createObjectURL(new Blob([content], { type: mimeType || 'application/octet-stream' }));
+    let objectUrl = content;
+    if (!content.startsWith('http')) {
+      objectUrl = content.startsWith('data:') ? content : URL.createObjectURL(new Blob([content], { type: mimeType || 'application/octet-stream' }));
+    }
     const link = document.createElement('a');
     link.href = objectUrl; link.download = name || 'file'; link.target = '-blank';
     document.body.appendChild(link); link.click();
     setTimeout(() => {
       if (link.parentNode) link.parentNode.removeChild(link);
-      if (!objectUrl.startsWith('data:')) URL.revokeObjectURL(objectUrl);
+      if (!objectUrl.startsWith('data:') && !objectUrl.startsWith('http')) URL.revokeObjectURL(objectUrl);
     }, 500);
   } catch (err) { console.error('Download failed:', err); }
 }
