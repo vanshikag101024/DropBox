@@ -10,7 +10,7 @@ const COLORS = [
   '#eab308',
 ];
 
-export function getLocalDevice(): NearbyDevice {
+export function getlocalDevice(): NearbyDevice {
   const storedId = sessionStorage.getItem('ephem-nearby-device-id');
   const storedName = localStorage.getItem('ephem-nearby-device-name');
   const storedColor = sessionStorage.getItem('ephem-nearby-device-color');

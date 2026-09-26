@@ -63,7 +63,7 @@
     word-wrap: normal;
     direction: ltr;
     -webkit-font-feature-settings: 'liga';
-    -webkit-font-smoothing: antialiasedantialiased;
+    -webkit-font-smoothing: antialiased;
   }
 }
 

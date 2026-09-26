@@ -75,7 +75,7 @@ export interface NearbyTransferOffer {
   timestamp: number;
 }
 
-export interface NearbyTransferResponse {
+export interface nearbyTransferResponse {
   transferId: string;
   toDeviceId: string;
   fromDeviceId: string;
