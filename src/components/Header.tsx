@@ -28,24 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
         >
           DropBox
         </button>
-        {activeSharesCount > 0 && (
-          <button            id="nav-tab-active-shares"
-            onClick={() => setActiveTab(activeTab === 'active-shares' ? 'send' : 'active-shares')}
-            className={`text-xs font-sans font-semibold px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'active-shares'
-                ? 'bg-slate-900 text-white'
-                : 'bg-white/80 hover:bg-white text-slate-700 shadow-2xs border border-slate-200/80'
-            }`}
-          >
-            <span              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: accent }}
-            />
-            <span>Transfers</span>           
-                  <span className="font-sans text-[10.5px] opacity-75">
-              ({activeSharesCount})
-            </span>       
-   </button>
-        )}
+
       </div>
       <div className="flex items-center">
         <ThemeColorPicker />

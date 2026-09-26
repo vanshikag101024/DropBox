@@ -117,13 +117,7 @@ function AppContent() {
 
   useEffect(() => {
     const fetchDrops = async () => {
-      try {
-        const liveDrops = await dropApi.listDrops();
-        setDrops(liveDrops || []);
-        setSelectedDrop(null);
-        setBackendConnected(true);
-      } catch (err: any) {
-      }
+      setBackendConnected(true);
     };
 
     const fetchStats = async () => {
@@ -337,7 +331,6 @@ function AppContent() {
 
   const handleSelectDrop = (drop: DropPayload) => {
     setSelectedDrop(drop);
-    setActiveTab('active-shares');
   };
 
   const handleConsumeTransfer = async (dropId: string) => {
@@ -531,17 +524,7 @@ function AppContent() {
           />
         )}
 
-        {activeTab === 'active-shares' && (
-          <ActiveSharesView
-            drops={drops}
-            selectedDropId={selectedDrop?.id}
-            onSelectDrop={(drop) => setSelectedDrop(drop)}
-            onBurnDrop={handleBurnDrop}
-            onShowToast={showToast}
-            onNavigateTransfer={() => setActiveTab('send')}
-            onConsumeTransfer={handleConsumeTransfer}
-          />
-        )}
+
       </main>
       <IncomingNearbyTransferModal offer={incomingOffer}
         onClose={() => setIncomingOffer(null)}
