@@ -43,7 +43,7 @@ export const StandaloneRecipientView: React.FC<StandaloneRecipientViewProps> = (
           style={{ borderColor: accentBorder }}
         >
           <div className="w-12 h-12 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
-            <span className="material-symbols-outlined text-[26px]">lock-clock</span>          </div>          <h2 className="text-lg font-bold text-stone-900">Transfer Expired or Shredded</h2>
+            <span className="material-symbols-outlined text-[26px]">lock_clock</span>          </div>          <h2 className="text-lg font-bold text-stone-900">Transfer Expired or Shredded</h2>
           <p className="text-[13.5px] text-stone-500 leading-relaxed">
             {errorMessage || 'This shared file has expired or was removed by its sender.'}
           </p>
@@ -114,7 +114,7 @@ export const StandaloneRecipientView: React.FC<StandaloneRecipientViewProps> = (
           className="text-[12.5px] hover:underline font-medium cursor-pointer inline-flex items-center gap-1"
           style={{ color: accent }}
         >
-          <span>Send a file</span>          <span className="material-symbols-outlined text-[14px]">arrow-forward</span>        </button>      </header>
+          <span>Send a file</span>          <span className="material-symbols-outlined text-[14px]">arrow_forward</span>        </button>      </header>
     <main className="flex-1 w-full max-w-xl mx-auto px-4 sm:px-6 py-8 sm:py-12 flex flex-col justify-center">
         <div          className="w-full bg-white rounded-3xl border shadow-[0-8px-30px-0-rgba(0,0,0,0.03)] overflow-hidden flex flex-col"
           style={{ borderColor: accentBorder }}
@@ -144,7 +144,7 @@ export const StandaloneRecipientView: React.FC<StandaloneRecipientViewProps> = (
               <div                className="w-12 h-12 rounded-2xl flex items-center justify-center border"
                 style={{ backgroundColor: accentTint, color: accent, borderColor: accentBorder }}
               >
-                <span className="material-symbols-outlined text-[24px]">picture-as-pdf</span>              </div>              <span className="text-[14px] font-medium text-stone-900">{drop.name}</span>   <a  href={rawUrl}
+                <span className="material-symbols-outlined text-[24px]">picture_as_pdf</span>              </div>              <span className="text-[14px] font-medium text-stone-900">{drop.name}</span>   <a  href={rawUrl}
                 target="-blank"
                 rel="noopener noreferrer"
                 className="text-[12px] hover:underline font-sans inline-flex items-center gap-1"
@@ -157,7 +157,7 @@ export const StandaloneRecipientView: React.FC<StandaloneRecipientViewProps> = (
               <div                className="w-12 h-12 rounded-2xl flex items-center justify-center border"
                 style={{ backgroundColor: accentTint, color: accent, borderColor: accentBorder }}
               >
-                <span className="material-symbols-outlined text-[24px]">graphic-eq</span>              </div>              <audio controls src={rawResourceSrc} className="w-full max-w-xs" />
+                <span className="material-symbols-outlined text-[24px]">graphic_eq</span>              </div>              <audio controls src={rawResourceSrc} className="w-full max-w-xs" />
             </div>         ) : isVideo ? (
   <div className="bg-[#1a0509] border-b flex justify-center" style={{ borderColor: accentBorder }}>
     <video controls src={rawResourceSrc} className="max-h-60 w-full" />
@@ -194,7 +194,7 @@ export const StandaloneRecipientView: React.FC<StandaloneRecipientViewProps> = (
                   title="Copy text"
                 >
                   <span className="material-symbols-outlined text-[16px]">
-                    {copiedText ? 'done' : 'content-copy'}
+                    {copiedText ? 'done' : 'content_copy'}
                   </span>                  <span>{copiedText ? 'Copied' : 'Copy'}</span>                </button>              )}
 
               <a                href={rawUrl}
@@ -204,7 +204,7 @@ export const StandaloneRecipientView: React.FC<StandaloneRecipientViewProps> = (
                 style={{ backgroundColor: accentTint, color: accent, borderColor: accentBorder }}
                 title="Open raw file in separate tab"
               >
-                <span className="material-symbols-outlined text-[16px]">open-in-new</span>
+                <span className="material-symbols-outlined text-[16px]">open_in_new</span>
                 <span>Open</span>              </a>
             </div>          </div>        </div>      </main>
       <footer className="w-full py-4 text-center text-[12px] text-stone-500">
