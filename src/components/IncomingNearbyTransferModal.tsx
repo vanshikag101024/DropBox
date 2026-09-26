@@ -175,7 +175,7 @@ export const IncomingNearbyTransferModal: React.FC<IncomingNearbyTransferModalPr
                     {formatBytes(file.sizeBytes)}
                   </p>                </div>              </div>
               {message && message.trim() && (
-                <p className="text-sm text-slate-600 font-hand italic px-1 -mt-1">
+                <p className="text-sm text-slate-600 font-hand font-bold italic px-1 -mt-1">
                   "{message.trim()}"
                 </p>              )}
 
