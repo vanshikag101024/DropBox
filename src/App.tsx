@@ -273,21 +273,36 @@ function AppContent() {
         setIsRecipientMode(true);
         setIsLoadingRecipient(true);
         setRecipientError(null);
-        const params = new URLSearchParams(hash.replace(/^#/,''));
+        const params = new URLSearchParams(hash.replace(/^#/, ''));
         const vaultId = params.get('vault');
+        const encodedData = params.get('data');
+
+        if (encodedData) {
+          try {
+            const jsonStr = decodeURIComponent(atob(encodedData));
+            const embeddedDrop = JSON.parse(jsonStr) as DropPayload;
+            if (embeddedDrop && embeddedDrop.id) {
+              setSelectedDrop(embeddedDrop);
+              setIsLoadingRecipient(false);
+              return;
+            }
+          } catch (e) {
+            console.debug('Embedded data decode notice:', e);
+          }
+        }
+
         if (vaultId) {
           try {
             const drop = await dropApi.getDrop(vaultId);
             setSelectedDrop(drop);
             setIsLoadingRecipient(false);
           } catch {
-
             const match = drops.find((d) => d.id === vaultId);
             if (match) {
               setSelectedDrop(match);
               setIsLoadingRecipient(false);
             } else {
-            setIsLoadingRecipient(false);
+              setIsLoadingRecipient(false);
               setRecipientError('This document has expired, reached its single-view limit, or was already burned.');
             }
           }

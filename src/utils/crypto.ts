@@ -30,10 +30,22 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export function getShareableVaultUrl(vaultId: string, key?: string): string {
+export function getShareableVaultUrl(vaultId: string, key?: string, dropPayload?: any): string {
   const origin = window.location.origin;
   const pathname = window.location.pathname;
-  return `${origin}${pathname}#vault=${encodeURIComponent(vaultId)}${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+  let hashStr = `#vault=${encodeURIComponent(vaultId)}${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+
+  if (dropPayload && dropPayload.content) {
+    try {
+      const jsonStr = JSON.stringify(dropPayload);
+      if (jsonStr.length < 150000) {
+        const b64 = btoa(encodeURIComponent(jsonStr));
+        hashStr += `&data=${encodeURIComponent(b64)}`;
+      }
+    } catch {}
+  }
+
+  return `${origin}${pathname}${hashStr}`;
 }
 
 export function getDirectRawUrl(vaultId: string): string {

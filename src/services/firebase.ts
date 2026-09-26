@@ -29,7 +29,13 @@ export const TELEMETRY_DOC_ID = 'global';
 
 export const DROPS_COLLECTION = 'ephemeral-vault-drops';
 
-export async function getTelemetryStatsFromFirestore(): Promise<GlobalTelemetryStats> {
+function isPermissionError(err: any): boolean {
+  if (!err) return false;
+  const msg = String(err.message || err.code || err);
+  return msg.includes('permissions') || msg.includes('permission-denied');
+}
+
+export async function getTelemetryStatsFromFirestore(): Promise<GlobalTelemetryStats | null> {
   try {
     const docRef = doc(db, TELEMETRY_COLLECTION, TELEMETRY_DOC_ID);
     const snap = await getDoc(docRef);
@@ -51,36 +57,13 @@ export async function getTelemetryStatsFromFirestore(): Promise<GlobalTelemetryS
         rating,
         ratingsCount,
       };
-    } else {
-      const initial = {
-        downloadedFiles: 0,
-        sentTransfers: 0,
-        bytesSent: 0,
-        ratingsCount: 0,
-        ratingsSum: 0,
-        rating: 5.0,
-        updatedAt: Date.now(),
-      };
-      await setDoc(docRef, initial).catch(() => {});
-      return {
-        downloadedFiles: 0,
-        sentTransfers: 0,
-        gigabytesSent: 0,
-        bytesSent: 0,
-        rating: 5.0,
-        ratingsCount: 0,
-      };
     }
+    return null;
   } catch (err) {
-    console.warn('Telemetry fetch notice:', err);
-    return {
-      downloadedFiles: 0,
-      sentTransfers: 0,
-      gigabytesSent: 0,
-      bytesSent: 0,
-      rating: 5.0,
-      ratingsCount: 0,
-    };
+    if (!isPermissionError(err)) {
+      console.debug('Telemetry fetch notice:', err);
+    }
+    return null;
   }
 }
 
@@ -102,7 +85,7 @@ export function subscribeToTelemetryStats(
         const gigabytesSent = Number((bytesSent / (1024 * 1024 * 1024)).toFixed(4));
         callback({
           downloadedFiles,
-        sentTransfers,
+          sentTransfers,
           gigabytesSent,
           bytesSent,
           rating,
@@ -111,7 +94,9 @@ export function subscribeToTelemetryStats(
       }
     },
     (err) => {
-      console.warn('Telemetry subscription notice:', err);
+      if (!isPermissionError(err)) {
+        console.debug('Telemetry subscription notice:', err);
+      }
     }
   );
 }
@@ -226,7 +211,9 @@ export async function saveDropToFirestore(drop: DropPayload): Promise<void> {
       });
     }
   } catch (err) {
-    console.error('saveDropToFirestore warning:', err);
+    if (!isPermissionError(err)) {
+      console.debug('saveDropToFirestore warning:', err);
+    }
   }
 }
 
@@ -277,7 +264,9 @@ export async function getDropFromFirestore(id: string): Promise<DropPayload | nu
 
     return data as DropPayload;
   } catch (err) {
-    console.error('getDropFromFirestore error:', err);
+    if (!isPermissionError(err)) {
+      console.debug('getDropFromFirestore error:', err);
+    }
     return null;
   }
 }
@@ -296,7 +285,9 @@ export async function deleteDropFromFirestore(id: string): Promise<void> {
     }
     await deleteDoc(docRef);
   } catch (err) {
-    console.warn('deleteDropFromFirestore warning:', err);
+    if (!isPermissionError(err)) {
+      console.debug('deleteDropFromFirestore warning:', err);
+    }
   }
 }
 
@@ -317,7 +308,9 @@ export async function consumeDropInFirestore(id: string): Promise<void> {
       });
     }
   } catch (err) {
-    console.warn('consumeDropInFirestore warning:', err);
+    if (!isPermissionError(err)) {
+      console.debug('consumeDropInFirestore warning:', err);
+    }
   }
 }
 
@@ -343,7 +336,9 @@ export async function listActiveDropsFromFirestore(): Promise<DropPayload[]> {
 
     return activeDrops;
   } catch (err) {
-    console.warn('listActiveDropsFromFirestore warning:', err);
+    if (!isPermissionError(err)) {
+      console.debug('listActiveDropsFromFirestore warning:', err);
+    }
     return [];
   }
 }
@@ -363,7 +358,9 @@ export async function purgeExpiredDropsFromFirestore(): Promise<number> {
     }
     return purged;
   } catch (err) {
-    console.warn('Firestore purge warning:', err);
+    if (!isPermissionError(err)) {
+      console.debug('Firestore purge warning:', err);
+    }
     return 0;
   }
 }
@@ -401,7 +398,9 @@ export async function announcePresenceInCloud(device: any, isReceiving: boolean 
     }
     return active;
   } catch (err) {
-    console.warn('Cloud presence notice:', err);
+    if (!isPermissionError(err)) {
+      console.debug('Cloud presence notice:', err);
+    }
     return [];
   }
 }
@@ -425,7 +424,9 @@ export function subscribeToCloudPresence(
       onUpdate(active);
     },
     (err) => {
-      console.warn('Cloud presence subscription warning:', err);
+      if (!isPermissionError(err)) {
+        console.debug('Cloud presence subscription warning:', err);
+      }
     }
   );
 }
@@ -448,7 +449,9 @@ export function subscribeToCloudOffers(
       }
     },
     (err) => {
-      console.warn('Cloud offers subscription warning:', err);
+      if (!isPermissionError(err)) {
+        console.debug('Cloud offers subscription warning:', err);
+      }
     }
   );
 }
@@ -463,7 +466,9 @@ export async function sendCloudTransferOffer(offerPayload: any): Promise<boolean
     });
     return true;
   } catch (err) {
-    console.warn('Send cloud transfer offer error:', err);
+    if (!isPermissionError(err)) {
+      console.debug('Send cloud transfer offer error:', err);
+    }
     return false;
   }
 }
@@ -478,7 +483,9 @@ export async function sendCloudTransferResponse(responsePayload: any): Promise<b
     });
     return true;
   } catch (err) {
-    console.warn('Send cloud transfer response error:', err);
+    if (!isPermissionError(err)) {
+      console.debug('Send cloud transfer response error:', err);
+    }
     return false;
   }
 }
@@ -501,7 +508,9 @@ export function subscribeToCloudResponses(
       }
     },
     (err) => {
-      console.warn('Cloud responses subscription warning:', err);
+      if (!isPermissionError(err)) {
+        console.debug('Cloud responses subscription warning:', err);
+      }
     }
   );
 }

@@ -551,7 +551,7 @@ export const TransferConsole: React.FC<TransferConsoleProps> = ({
     onCreateDrop(newDrop);
     setLatestCreatedDrop(newDrop);
 
-    const shareUrl = getShareableVaultUrl(dropId, key);
+    const shareUrl = getShareableVaultUrl(dropId, key, newDrop);
     setGeneratedLink(shareUrl);
     setIsGenerating(false);
 
