@@ -191,7 +191,7 @@ export const ActiveSharesView: React.FC<ActiveSharesViewProps> = ({
                         className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center border"
                         style={{ backgroundColor: accentTint, color: accent, borderColor: accentBorder }}
                     >
-                        <span className="material-symbols-outlined text-[28px]">folder-off</span>
+                        <span className="material-symbols-outlined text-[28px]">folder_off</span>
                     </div>
                     <h2 className="text-3xl sm:text-4xl font-bold font-hand text-stone-900">No Active Shares</h2>
                     <p className="text-[13.5px] text-stone-500 max-w-sm mx-auto leading-relaxed">
@@ -323,7 +323,7 @@ export const ActiveSharesView: React.FC<ActiveSharesViewProps> = ({
                       }`}
                       title={isExpanded ? 'Collapse' : 'Show details & QR'}
                     >
-                      <span className="material-symbols-outlined text-[17px]">qr-code-2</span>                    </button>
+                      <span className="material-symbols-outlined text-[17px]">qr_code_2</span>                    </button>
 
                     <button                      onClick={(e) => {
                         e.stopPropagation();
@@ -340,7 +340,7 @@ export const ActiveSharesView: React.FC<ActiveSharesViewProps> = ({
                         isExpanded ? 'rotate-180 text-stone-700' : ''
                     }`}
                     >
-                      <span className="material-symbols-outlined text-[19px]">expand-more</span>                    </div>
+                      <span className="material-symbols-outlined text-[19px]">expand_more</span>                    </div>
                   </div>                </div>
 
                 <AnimatePresence initial={false}>
